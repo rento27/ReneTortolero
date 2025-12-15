@@ -8,5 +8,6 @@ interface Window {
     reload: () => void
     resizeBrowserView: (sidePanelOpen: boolean) => void
     onUrlChange: (callback: (url: string) => void) => void
+    scanPage: () => Promise<any>
   }
 }

@@ -133,6 +133,48 @@ ipcMain.on('shell:resize-view', (_, sidePanelOpen) => {
   updateViewBounds()
 })
 
+ipcMain.handle('agent:scan', async () => {
+  if (!view) return null
+
+  const script = `
+    (() => {
+      const getMetaContent = (name) => {
+        const meta = document.querySelector(\`meta[name="\${name}"]\`);
+        return meta ? meta.getAttribute('content') : '';
+      };
+
+      const getHeadings = () => {
+        return Array.from(document.querySelectorAll('h1, h2, h3'))
+          .map(h => h.innerText.trim())
+          .filter(text => text.length > 0)
+          .slice(0, 10); // Limit to top 10 to keep it clean
+      };
+
+      const getInteractive = () => {
+        return Array.from(document.querySelectorAll('button, a'))
+           .map(el => el.innerText.trim())
+           .filter(text => text.length > 0 && text.length < 50)
+           .slice(0, 20); // Limit to 20
+      };
+
+      return {
+        title: document.title,
+        description: getMetaContent('description'),
+        headings: getHeadings(),
+        interactive: getInteractive()
+      };
+    })()
+  `
+
+  try {
+    const data = await view.webContents.executeJavaScript(script)
+    return data
+  } catch (error) {
+    console.error('Agent scan failed:', error)
+    return { error: 'Failed to scan page' }
+  }
+})
+
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

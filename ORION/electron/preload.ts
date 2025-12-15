@@ -9,5 +9,6 @@ contextBridge.exposeInMainWorld('electron', {
   resizeBrowserView: (sidePanelOpen: boolean) => ipcRenderer.send('shell:resize-view', sidePanelOpen),
   onUrlChange: (callback: (url: string) => void) => {
     ipcRenderer.on('shell:url-change', (_, url) => callback(url))
-  }
+  },
+  scanPage: () => ipcRenderer.invoke('agent:scan')
 })
