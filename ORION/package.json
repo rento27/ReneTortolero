@@ -15,10 +15,19 @@
   },
   "build": {
     "appId": "com.orion.browser",
+    "productName": "ORION",
+    "directories": {
+      "buildResources": "build"
+    },
     "mac": {
       "target": "dmg",
-      "category": "public.app-category.productivity"
-    }
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.icns"
+    },
+    "files": [
+      "dist",
+      "dist-electron"
+    ]
   },
   "devDependencies": {
     "@types/react": "^18.2.64",
