@@ -1,4 +1,4 @@
-import { app, BrowserWindow, BrowserView, ipcMain } from 'electron'
+import { app, BrowserWindow, BrowserView, ipcMain, session, shell, DownloadItem } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
@@ -17,6 +17,8 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 
 let win: BrowserWindow | null
 let view: BrowserView | null = null
 let isSidePanelOpen = true // Default state matching UI
+// Map to store active download items by ID (we'll use startTime as a simple ID for now)
+const downloadItems = new Map<string, DownloadItem>()
 
 // CONSTANTS
 const TOP_BAR_HEIGHT = 40
@@ -70,6 +72,52 @@ function createBrowserView() {
 
   view.webContents.on('did-navigate-in-page', (_, url) => {
     win?.webContents.send('shell:url-change', url)
+  })
+}
+
+function setupDownloadManager() {
+  session.defaultSession.on('will-download', (_event, item, _webContents) => {
+    const id = item.getStartTime().toString()
+    downloadItems.set(id, item)
+
+    const fileName = item.getFilename()
+    const totalBytes = item.getTotalBytes()
+
+    // Notify Renderer: Start
+    win?.webContents.send('download:start', {
+      id,
+      filename: fileName,
+      totalBytes
+    })
+
+    item.on('updated', (_event, state) => {
+      if (state === 'interrupted') {
+        win?.webContents.send('download:complete', {
+          id,
+          state: 'interrupted'
+        })
+      } else if (state === 'progressing') {
+        if (item.isPaused()) {
+           // Handle paused state if needed
+        } else {
+           win?.webContents.send('download:progress', {
+             id,
+             receivedBytes: item.getReceivedBytes(),
+             totalBytes: item.getTotalBytes(),
+             percentage: item.getTotalBytes() > 0 ? (item.getReceivedBytes() / item.getTotalBytes()) * 100 : 0
+           })
+        }
+      }
+    })
+
+    item.once('done', (_event, state) => {
+      downloadItems.delete(id)
+      win?.webContents.send('download:complete', {
+        id,
+        state, // 'completed', 'cancelled', 'interrupted'
+        path: item.getSavePath()
+      })
+    })
   })
 }
 
@@ -172,6 +220,17 @@ ipcMain.on('shell:stop-find', () => {
   }
 })
 
+ipcMain.on('shell:show-item', (_, fullPath) => {
+  shell.showItemInFolder(fullPath)
+})
+
+ipcMain.on('shell:cancel-download', (_, id) => {
+  const item = downloadItems.get(id)
+  if (item) {
+    item.cancel()
+  }
+})
+
 ipcMain.handle('agent:scan', async () => {
   if (!view) return null
 
@@ -229,4 +288,7 @@ app.on('activate', () => {
   }
 })
 
-app.whenReady().then(createWindow)
+app.whenReady().then(() => {
+  createWindow()
+  setupDownloadManager()
+})

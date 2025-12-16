@@ -18,5 +18,12 @@ contextBridge.exposeInMainWorld('electron', {
   zoomReset: () => ipcRenderer.send('shell:zoom-reset'),
   printPage: () => ipcRenderer.send('shell:print'),
   findInPage: (text: string) => ipcRenderer.send('shell:find-text', text),
-  stopFind: () => ipcRenderer.send('shell:stop-find')
+  stopFind: () => ipcRenderer.send('shell:stop-find'),
+
+  // Download Manager
+  showItemInFolder: (path: string) => ipcRenderer.send('shell:show-item', path),
+  cancelDownload: (id: string) => ipcRenderer.send('shell:cancel-download', id),
+  onDownloadStart: (callback: (data: any) => void) => ipcRenderer.on('download:start', (_, data) => callback(data)),
+  onDownloadProgress: (callback: (data: any) => void) => ipcRenderer.on('download:progress', (_, data) => callback(data)),
+  onDownloadComplete: (callback: (data: any) => void) => ipcRenderer.on('download:complete', (_, data) => callback(data)),
 })

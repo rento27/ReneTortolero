@@ -17,5 +17,12 @@ interface Window {
     printPage: () => void
     findInPage: (text: string) => void
     stopFind: () => void
+
+    // Downloads
+    showItemInFolder: (path: string) => void
+    cancelDownload: (id: string) => void
+    onDownloadStart: (callback: (data: any) => void) => void
+    onDownloadProgress: (callback: (data: any) => void) => void
+    onDownloadComplete: (callback: (data: any) => void) => void
   }
 }
