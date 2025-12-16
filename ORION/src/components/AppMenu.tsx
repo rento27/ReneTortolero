@@ -8,9 +8,10 @@ interface AppMenuProps {
   onClose: () => void;
   onNewTab: () => void;
   onToggleFind: () => void;
+  onOpenHistory: () => void;
 }
 
-export const AppMenu: React.FC<AppMenuProps> = ({ onClose, onNewTab, onToggleFind }) => {
+export const AppMenu: React.FC<AppMenuProps> = ({ onClose, onNewTab, onToggleFind, onOpenHistory }) => {
   return (
     <div className="absolute right-4 top-[50px] w-[280px] bg-[#0A0A0A] border border-[#00F0FF] rounded-lg shadow-[0_0_20px_rgba(0,240,255,0.2)] z-50 text-[#E0E0E0] font-mono text-sm">
       {/* Menu Header (Optional) */}
@@ -39,7 +40,7 @@ export const AppMenu: React.FC<AppMenuProps> = ({ onClose, onNewTab, onToggleFin
 
         <div className="h-[1px] bg-[#333] my-2 mx-2" />
 
-        <MenuItem icon={<History size={16} />} label="Historial" onClick={onClose} />
+        <MenuItem icon={<History size={16} />} label="Historial" onClick={() => { onOpenHistory(); onClose(); }} />
         <MenuItem icon={<Download size={16} />} label="Descargas" onClick={onClose} />
         <MenuItem icon={<Settings size={16} />} label="Configuración" onClick={onClose} />
       </div>

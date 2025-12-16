@@ -1,16 +1,57 @@
 import React, { useEffect, useState } from 'react';
+import { Star } from 'lucide-react';
+import { BookmarkItem } from '../types';
 
-export const Omnibox: React.FC = () => {
+interface OmniboxProps {
+  onBookmarkUpdate: () => void;
+}
+
+export const Omnibox: React.FC<OmniboxProps> = ({ onBookmarkUpdate }) => {
   const [url, setUrl] = useState('');
+  const [isBookmarked, setIsBookmarked] = useState(false);
 
   useEffect(() => {
     // Listen for URL changes from the main process
     if (window.electron && window.electron.onUrlChange) {
       window.electron.onUrlChange((newUrl) => {
         setUrl(newUrl);
+        checkBookmarkStatus(newUrl);
       });
     }
   }, []);
+
+  const checkBookmarkStatus = (currentUrl: string) => {
+    const stored = localStorage.getItem('orion_bookmarks');
+    if (stored) {
+      const bookmarks: BookmarkItem[] = JSON.parse(stored);
+      setIsBookmarked(bookmarks.some(b => b.url === currentUrl));
+    } else {
+      setIsBookmarked(false);
+    }
+  };
+
+  const toggleBookmark = () => {
+    const stored = localStorage.getItem('orion_bookmarks');
+    let bookmarks: BookmarkItem[] = stored ? JSON.parse(stored) : [];
+
+    if (isBookmarked) {
+      // Remove
+      bookmarks = bookmarks.filter(b => b.url !== url);
+    } else {
+      // Add
+      const newBookmark: BookmarkItem = {
+        id: Math.random().toString(36).substring(7),
+        url: url,
+        title: url, // Title isn't readily available here without more IPC, defaulting to URL
+        timestamp: Date.now()
+      };
+      bookmarks.push(newBookmark);
+    }
+
+    localStorage.setItem('orion_bookmarks', JSON.stringify(bookmarks));
+    setIsBookmarked(!isBookmarked);
+    onBookmarkUpdate(); // Notify parent to refresh bar
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
@@ -43,15 +84,23 @@ export const Omnibox: React.FC = () => {
       </div>
 
       {/* Input Field */}
-      <div className="flex-1">
+      <div className="flex-1 relative">
         <input
           type="text"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Ingresa coordenadas o URL..."
-          className="w-full bg-[#111] border border-[#333] rounded px-4 py-1.5 text-sm text-[#E0E0E0] focus:outline-none focus:border-[#00F0FF] focus:shadow-[0_0_5px_rgba(0,240,255,0.2)] placeholder-gray-600 font-mono"
+          className="w-full bg-[#111] border border-[#333] rounded px-4 py-1.5 pr-10 text-sm text-[#E0E0E0] focus:outline-none focus:border-[#00F0FF] focus:shadow-[0_0_5px_rgba(0,240,255,0.2)] placeholder-gray-600 font-mono"
         />
+
+        {/* Bookmark Star */}
+        <button
+          onClick={toggleBookmark}
+          className={`absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-[#333] transition-colors ${isBookmarked ? 'text-yellow-400 fill-yellow-400' : 'text-gray-500'}`}
+        >
+          <Star size={14} />
+        </button>
       </div>
 
       {/* Extra Actions */}

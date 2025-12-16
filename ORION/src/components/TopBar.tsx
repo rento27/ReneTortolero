@@ -10,9 +10,10 @@ interface TopBarProps {
   activeTabId: string;
   onTabChange: (id: string) => void;
   onNewTab: () => void;
+  onOpenHistory: () => void;
 }
 
-export const TopBar: React.FC<TopBarProps> = ({ tabs, activeTabId, onTabChange, onNewTab }) => {
+export const TopBar: React.FC<TopBarProps> = ({ tabs, activeTabId, onTabChange, onNewTab, onOpenHistory }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isFindOpen, setIsFindOpen] = useState(false);
 
@@ -57,6 +58,7 @@ export const TopBar: React.FC<TopBarProps> = ({ tabs, activeTabId, onTabChange, 
           onClose={() => setIsMenuOpen(false)}
           onNewTab={onNewTab}
           onToggleFind={toggleFind}
+          onOpenHistory={onOpenHistory}
         />
       )}
 
