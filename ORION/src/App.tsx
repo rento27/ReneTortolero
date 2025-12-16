@@ -19,8 +19,10 @@ function App() {
 
   const handleTabChange = (id: string) => {
     setActiveTabId(id);
-    // Here we would tell Electron to switch views if we supported multi-view
-    // For now, it just updates the UI active state
+    const tab = tabs.find(t => t.id === id);
+    if (tab && window.electron && window.electron.navigate) {
+      window.electron.navigate(tab.url);
+    }
   };
 
   const handleNewTab = () => {
@@ -28,10 +30,13 @@ function App() {
     const newTab: TabData = {
       id: newId,
       title: 'Nueva Pestaña',
-      url: ''
+      url: 'about:blank'
     };
     setTabs(prev => [...prev, newTab]);
     setActiveTabId(newId);
+    if (window.electron && window.electron.navigate) {
+        window.electron.navigate(newTab.url);
+    }
   };
 
   return (

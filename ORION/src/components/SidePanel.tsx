@@ -44,6 +44,11 @@ export const SidePanel: React.FC = () => {
     }
   };
 
+  const resetKey = () => {
+    localStorage.removeItem('orion_gemini_key');
+    window.location.reload();
+  };
+
   const typeWriterEffect = async (text: string) => {
     const id = Math.random().toString(36).substring(7);
     // Initialize empty message
@@ -155,7 +160,16 @@ PREGUNTA DEL COMANDANTE: ${userPrompt}`
     <div className="w-[300px] h-full border-l border-[#333] bg-[#0A0A0A] flex flex-col">
       <div className="h-[40px] border-b border-[#333] flex items-center justify-between px-4 bg-[#050505]">
         <h2 className="text-sm font-bold tracking-widest text-[#00F0FF]">ORION AI</h2>
-        <div className="w-2 h-2 rounded-full bg-[#00F0FF] animate-pulse"></div>
+        <div className="flex items-center gap-3">
+           <button
+             onClick={resetKey}
+             className="text-[10px] text-red-500 hover:text-red-400 font-mono tracking-wider border border-red-900 px-1 hover:bg-red-900/20 transition-colors"
+             title="Reset Connection"
+           >
+             RESET
+           </button>
+           <div className="w-2 h-2 rounded-full bg-[#00F0FF] animate-pulse"></div>
+        </div>
       </div>
 
       <div className="flex-1 p-4 overflow-y-auto scrollbar-thin scrollbar-thumb-[#333]">
