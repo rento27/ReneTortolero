@@ -268,6 +268,61 @@ ipcMain.on('shell:toggle-shields', () => {
   }
 })
 
+ipcMain.on('agent:perform-action', async (_, action) => {
+  if (!view) return
+
+  const { type, selector, value } = action
+  let script = ''
+
+  switch (type) {
+    case 'click':
+      script = `
+        (() => {
+          const el = document.querySelector('${selector}');
+          if (el) {
+            el.click();
+            return { success: true };
+          }
+          return { success: false, error: 'Element not found' };
+        })()
+      `
+      break
+    case 'type':
+      script = `
+        (() => {
+          const el = document.querySelector('${selector}');
+          if (el) {
+            el.value = '${value}';
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            return { success: true };
+          }
+          return { success: false, error: 'Element not found' };
+        })()
+      `
+      break
+    case 'scroll':
+      script = `
+        (() => {
+          const el = document.querySelector('${selector}');
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return { success: true };
+          }
+          return { success: false, error: 'Element not found' };
+        })()
+      `
+      break
+  }
+
+  if (script) {
+    try {
+      await view.webContents.executeJavaScript(script)
+    } catch (e) {
+      console.error('Agent action failed', e)
+    }
+  }
+})
+
 ipcMain.handle('agent:scan', async () => {
   if (!view) return null
 
@@ -282,14 +337,52 @@ ipcMain.handle('agent:scan', async () => {
         return Array.from(document.querySelectorAll('h1, h2, h3'))
           .map(h => h.innerText.trim())
           .filter(text => text.length > 0)
-          .slice(0, 10); // Limit to top 10 to keep it clean
+          .slice(0, 10);
       };
 
+      // Improved interactive element scanning with unique selectors
       const getInteractive = () => {
-        return Array.from(document.querySelectorAll('button, a'))
-           .map(el => el.innerText.trim())
-           .filter(text => text.length > 0 && text.length < 50)
-           .slice(0, 20); // Limit to 20
+        const getPath = (el) => {
+          if (el.id) return '#' + el.id;
+          if (el === document.body) return 'body';
+
+          let path = [];
+          while (el.parentNode) {
+             let index = 0;
+             let sibling = el;
+             while ((sibling = sibling.previousElementSibling)) {
+               if (sibling.tagName === el.tagName) index++;
+             }
+             path.unshift(el.tagName.toLowerCase() + (index > 0 ? \`:nth-of-type(\${index + 1})\` : ''));
+             el = el.parentNode;
+             if (el.id) {
+               path.unshift('#' + el.id);
+               break;
+             }
+             if (el === document.body) {
+               path.unshift('body');
+               break;
+             }
+          }
+          return path.join(' > ');
+        };
+
+        return Array.from(document.querySelectorAll('button, a, input, [role="button"]'))
+           .map(el => {
+             const text = el.innerText ? el.innerText.trim() : el.value || el.placeholder || '';
+             // Skip invisible or empty elements
+             const rect = el.getBoundingClientRect();
+             if (rect.width === 0 || rect.height === 0 || !text) return null;
+
+             return {
+               tag: el.tagName.toLowerCase(),
+               text: text.substring(0, 50),
+               selector: getPath(el),
+               type: el.tagName === 'INPUT' ? 'input' : 'clickable'
+             };
+           })
+           .filter(Boolean)
+           .slice(0, 30); // Limit results
       };
 
       return {

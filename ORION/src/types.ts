@@ -19,3 +19,17 @@ export interface DownloadItem {
   state: 'progressing' | 'completed' | 'cancelled' | 'interrupted';
   path?: string;
 }
+
+export interface InteractiveElement {
+  tag: string;
+  text: string;
+  selector: string;
+  type: 'clickable' | 'input';
+}
+
+export interface PageScanResult {
+  title: string;
+  description: string;
+  headings: string[];
+  interactive: InteractiveElement[];
+}

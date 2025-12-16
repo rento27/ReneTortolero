@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Bug } from 'lucide-react';
 
 interface Message {
   id: string;
@@ -15,6 +16,9 @@ export const SidePanel: React.FC = () => {
   ]);
   const [isScanning, setIsScanning] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Debug State
+  const [debugMode, setDebugMode] = useState(false);
 
   // Load API Key on mount
   useEffect(() => {
@@ -126,6 +130,25 @@ PREGUNTA DEL COMANDANTE: ${userPrompt}`
     }
   };
 
+  const runTestClick = async () => {
+    addMessage('system', '> EJECUTANDO PROTOCOLO DE PRUEBA MOTOR...');
+    try {
+      const data = await window.electron.scanPage();
+      if (data && data.interactive && data.interactive.length > 0) {
+        const target = data.interactive[0]; // First element
+        addMessage('system', `> OBJETIVO LOCALIZADO: ${target.text || target.tag} (${target.selector})`);
+        addMessage('system', '> INICIANDO SECUENCIA DE CLIC...');
+
+        window.electron.performAction({ type: 'click', selector: target.selector });
+        addMessage('system', '> ACCIÓN ENVIADA.');
+      } else {
+        addMessage('system', '> NO SE ENCONTRARON OBJETIVOS INTERACTIVOS.');
+      }
+    } catch (e) {
+      addMessage('system', '> FALLO EN SISTEMA DE MOTORES.');
+    }
+  };
+
   // --- RENDER: LOGIN VIEW ---
   if (!apiKey) {
     return (
@@ -161,6 +184,13 @@ PREGUNTA DEL COMANDANTE: ${userPrompt}`
       <div className="h-[40px] border-b border-[#333] flex items-center justify-between px-4 bg-[#050505]">
         <h2 className="text-sm font-bold tracking-widest text-[#00F0FF]">ORION AI</h2>
         <div className="flex items-center gap-3">
+           <button
+             onClick={() => setDebugMode(!debugMode)}
+             className={`text-[10px] font-mono tracking-wider px-1 transition-colors ${debugMode ? 'text-[#00F0FF]' : 'text-gray-600'}`}
+             title="Toggle Debug Mode"
+           >
+             <Bug size={14} />
+           </button>
            <button
              onClick={resetKey}
              className="text-[10px] text-red-500 hover:text-red-400 font-mono tracking-wider border border-red-900 px-1 hover:bg-red-900/20 transition-colors"
@@ -198,7 +228,7 @@ PREGUNTA DEL COMANDANTE: ${userPrompt}`
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="p-4 border-t border-[#333] bg-[#050505]">
+      <div className="p-4 border-t border-[#333] bg-[#050505] space-y-2">
         <button
           onClick={handleScan}
           disabled={isScanning}
@@ -210,6 +240,17 @@ PREGUNTA DEL COMANDANTE: ${userPrompt}`
         >
           {isScanning ? 'ANALIZANDO...' : 'ANALIZAR SECTOR'}
         </button>
+
+        {debugMode && (
+          <button
+            onClick={runTestClick}
+            className="w-full py-2 px-4 bg-[#111] border border-orange-500 text-orange-500
+                       font-mono text-xs tracking-widest uppercase
+                       hover:bg-orange-500 hover:text-black transition-all duration-300"
+          >
+            TEST MOTOR: CLIC
+          </button>
+        )}
       </div>
     </div>
   );

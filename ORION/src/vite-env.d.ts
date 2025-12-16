@@ -29,5 +29,8 @@ interface Window {
     toggleShields: () => void
     getShieldsStatus: () => Promise<boolean>
     onShieldsUpdate: (callback: (active: boolean) => void) => void
+
+    // Agent
+    performAction: (action: { type: 'click' | 'type' | 'scroll', selector: string, value?: string }) => void
   }
 }

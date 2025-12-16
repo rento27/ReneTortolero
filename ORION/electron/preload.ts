@@ -30,5 +30,8 @@ contextBridge.exposeInMainWorld('electron', {
   // AdBlock
   toggleShields: () => ipcRenderer.send('shell:toggle-shields'),
   getShieldsStatus: () => ipcRenderer.invoke('shell:get-shields-status'),
-  onShieldsUpdate: (callback: (active: boolean) => void) => ipcRenderer.on('shell:shields-update', (_, active) => callback(active))
+  onShieldsUpdate: (callback: (active: boolean) => void) => ipcRenderer.on('shell:shields-update', (_, active) => callback(active)),
+
+  // Agent Actions
+  performAction: (action: any) => ipcRenderer.send('agent:perform-action', action)
 })
