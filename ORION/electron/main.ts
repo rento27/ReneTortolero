@@ -133,6 +133,45 @@ ipcMain.on('shell:resize-view', (_, sidePanelOpen) => {
   updateViewBounds()
 })
 
+// Chrome Parity Handlers
+ipcMain.on('shell:zoom-in', () => {
+  if (view) {
+    const currentZoom = view.webContents.getZoomLevel()
+    view.webContents.setZoomLevel(currentZoom + 0.5)
+  }
+})
+
+ipcMain.on('shell:zoom-out', () => {
+  if (view) {
+    const currentZoom = view.webContents.getZoomLevel()
+    view.webContents.setZoomLevel(currentZoom - 0.5)
+  }
+})
+
+ipcMain.on('shell:zoom-reset', () => {
+  if (view) {
+    view.webContents.setZoomLevel(0)
+  }
+})
+
+ipcMain.on('shell:print', () => {
+  if (view) {
+    view.webContents.print()
+  }
+})
+
+ipcMain.on('shell:find-text', (_, text) => {
+  if (view && text) {
+    view.webContents.findInPage(text)
+  }
+})
+
+ipcMain.on('shell:stop-find', () => {
+  if (view) {
+    view.webContents.stopFindInPage('clearSelection')
+  }
+})
+
 ipcMain.handle('agent:scan', async () => {
   if (!view) return null
 

@@ -9,5 +9,13 @@ interface Window {
     resizeBrowserView: (sidePanelOpen: boolean) => void
     onUrlChange: (callback: (url: string) => void) => void
     scanPage: () => Promise<any>
+
+    // Chrome Parity
+    zoomIn: () => void
+    zoomOut: () => void
+    zoomReset: () => void
+    printPage: () => void
+    findInPage: (text: string) => void
+    stopFind: () => void
   }
 }
