@@ -272,13 +272,16 @@ ipcMain.on('agent:perform-action', async (_, action) => {
   if (!view) return
 
   const { type, selector, value } = action
+  // Sanitize input: JSON.stringify safely quotes the strings
+  const safeSelector = JSON.stringify(selector)
+  const safeValue = value ? JSON.stringify(value) : '""'
   let script = ''
 
   switch (type) {
     case 'click':
       script = `
         (() => {
-          const el = document.querySelector('${selector}');
+          const el = document.querySelector(${safeSelector});
           if (el) {
             el.click();
             return { success: true };
@@ -290,9 +293,9 @@ ipcMain.on('agent:perform-action', async (_, action) => {
     case 'type':
       script = `
         (() => {
-          const el = document.querySelector('${selector}');
+          const el = document.querySelector(${safeSelector});
           if (el) {
-            el.value = '${value}';
+            el.value = ${safeValue};
             el.dispatchEvent(new Event('input', { bubbles: true }));
             return { success: true };
           }
@@ -303,7 +306,7 @@ ipcMain.on('agent:perform-action', async (_, action) => {
     case 'scroll':
       script = `
         (() => {
-          const el = document.querySelector('${selector}');
+          const el = document.querySelector(${safeSelector});
           if (el) {
             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
             return { success: true };

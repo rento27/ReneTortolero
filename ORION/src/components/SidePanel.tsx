@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bug } from 'lucide-react';
+import { Bug, Send } from 'lucide-react';
 
 interface Message {
   id: string;
@@ -14,6 +14,7 @@ export const SidePanel: React.FC = () => {
     { id: 'init', sender: 'system', text: "System initialized..." },
     { id: 'await', sender: 'system', text: "Awaiting authentication..." }
   ]);
+  const [userInput, setUserInput] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -66,8 +67,48 @@ export const SidePanel: React.FC = () => {
     }
   };
 
+  const executeAgentAction = async (actionJson: string) => {
+    try {
+      const action = JSON.parse(actionJson);
+      // Map AI 'action' property to IPC 'type' property
+      const mappedAction = {
+        ...action,
+        type: action.action
+      };
+
+      addMessage('system', `> INICIANDO SECUENCIA MOTOR: ${action.action.toUpperCase()}`);
+
+      if (window.electron && window.electron.performAction) {
+        window.electron.performAction(mappedAction);
+        addMessage('system', '> EJECUCIÓN EXITOSA.');
+      } else {
+        addMessage('system', '> ERROR: MOTOR NO DISPONIBLE.');
+      }
+    } catch (e) {
+      addMessage('system', '> ERROR DE PARSEO DE COMANDO.');
+    }
+  };
+
   const askOrion = async (pageData: any, userPrompt: string) => {
     try {
+      const systemPrompt = `
+Eres ORION, un Agente de Navegación Autónomo.
+Tienes capacidad para interactuar con la web actual.
+
+HERRAMIENTAS DISPONIBLES (Usa estas acciones en tu respuesta si se solicita):
+- { "action": "click", "selector": "css_selector" }
+- { "action": "type", "selector": "css_selector", "value": "texto" }
+- { "action": "scroll", "selector": "css_selector" }
+
+CONTEXTO VISUAL (Elementos interactivos detectados):
+${JSON.stringify(pageData.interactive)}
+
+REGLAS DE RESPUESTA:
+1. Si el usuario pide una acción (ej: 'Busca X', 'Entra en el primer link'), TU RESPUESTA DEBE SER ÚNICAMENTE UN BLOQUE JSON VÁLIDO con la acción.
+2. Si el usuario solo charla, responde con texto normal.
+3. Sé preciso con los selectores del contexto visual.
+`;
+
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
         {
@@ -76,9 +117,7 @@ export const SidePanel: React.FC = () => {
           body: JSON.stringify({
             contents: [{
               parts: [{
-                text: `Eres ORION, una IA de navegación táctica. Analiza los siguientes datos extraídos de una web. Sé conciso, militar y útil.
-DATOS DEL SECTOR: ${JSON.stringify(pageData)}
-PREGUNTA DEL COMANDANTE: ${userPrompt}`
+                text: `${systemPrompt}\n\nDATOS DEL SECTOR: ${JSON.stringify(pageData)}\nPREGUNTA DEL COMANDANTE: ${userPrompt}`
               }]
             }]
           })
@@ -94,7 +133,13 @@ PREGUNTA DEL COMANDANTE: ${userPrompt}`
       const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
       if (aiText) {
-        await typeWriterEffect(aiText);
+        // Check for JSON action
+        const jsonMatch = aiText.match(/\{[\s\S]*"action"[\s\S]*\}/);
+        if (jsonMatch) {
+          await executeAgentAction(jsonMatch[0]);
+        } else {
+          await typeWriterEffect(aiText);
+        }
       } else {
         addMessage('system', 'Error: No tactical response received.');
       }
@@ -105,8 +150,10 @@ PREGUNTA DEL COMANDANTE: ${userPrompt}`
     }
   };
 
-  const handleScan = async () => {
+  const handleScan = async (customPrompt?: string) => {
     if (!apiKey) return;
+
+    const promptToUse = customPrompt || 'Genera un informe de situación de este sitio web. Identifica el propósito y riesgos potenciales.';
 
     setIsScanning(true);
     addMessage('system', '> INICIANDO ESCANEO DE DOM...');
@@ -116,9 +163,9 @@ PREGUNTA DEL COMANDANTE: ${userPrompt}`
 
       if (data) {
         addMessage('system', '> DATOS EXTRACTADOS CON ÉXITO.');
-        addMessage('user', 'Genera un informe de situación.');
+        if (!customPrompt) addMessage('user', promptToUse); // Show default prompt if not typed
 
-        await askOrion(data, 'Genera un informe de situación de este sitio web. Identifica el propósito y riesgos potenciales.');
+        await askOrion(data, promptToUse);
       } else {
         addMessage('system', '> ERROR: Escaneo fallido.');
       }
@@ -127,6 +174,20 @@ PREGUNTA DEL COMANDANTE: ${userPrompt}`
       console.error(error);
     } finally {
       setIsScanning(false);
+    }
+  };
+
+  const handleSendMessage = () => {
+    if (!userInput.trim() || isScanning) return;
+    addMessage('user', userInput);
+    handleScan(userInput); // Pass user input as the prompt
+    setUserInput('');
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
     }
   };
 
@@ -229,8 +290,28 @@ PREGUNTA DEL COMANDANTE: ${userPrompt}`
       </div>
 
       <div className="p-4 border-t border-[#333] bg-[#050505] space-y-2">
+        {/* Chat Input */}
+        <div className="flex gap-2 mb-2">
+          <input
+            type="text"
+            value={userInput}
+            onChange={(e) => setUserInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Enviar comando..."
+            className="flex-1 bg-[#111] border border-[#333] text-[#E0E0E0] text-xs px-2 py-2 rounded focus:outline-none focus:border-[#00F0FF] font-mono placeholder-gray-600"
+            disabled={isScanning}
+          />
+          <button
+            onClick={handleSendMessage}
+            disabled={isScanning || !userInput.trim()}
+            className="bg-[#1A1A1D] border border-[#333] text-[#00F0FF] px-2 rounded hover:bg-[#00F0FF] hover:text-black transition-colors disabled:opacity-50"
+          >
+            <Send size={14} />
+          </button>
+        </div>
+
         <button
-          onClick={handleScan}
+          onClick={() => handleScan()} // No arg = default prompt
           disabled={isScanning}
           className="w-full py-2 px-4 bg-[#1A1A1D] border border-[#00F0FF] text-[#00F0FF]
                      font-mono text-xs tracking-widest uppercase
