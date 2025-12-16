@@ -1,6 +1,8 @@
 import { app, BrowserWindow, BrowserView, ipcMain, session, shell, DownloadItem } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import { ElectronBlocker } from '@cliqz/adblocker-electron'
+import fetch from 'cross-fetch'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -19,6 +21,9 @@ let view: BrowserView | null = null
 let isSidePanelOpen = true // Default state matching UI
 // Map to store active download items by ID (we'll use startTime as a simple ID for now)
 const downloadItems = new Map<string, DownloadItem>()
+
+let blocker: ElectronBlocker | null = null
+let shieldsActive = true
 
 // CONSTANTS
 const TOP_BAR_HEIGHT = 40
@@ -119,6 +124,17 @@ function setupDownloadManager() {
       })
     })
   })
+}
+
+async function setupAdBlocker() {
+  try {
+    blocker = await ElectronBlocker.fromPrebuiltAdsAndTracking(fetch)
+    if (shieldsActive) {
+      blocker.enableBlockingInSession(session.defaultSession)
+    }
+  } catch (error) {
+    console.error('Failed to initialize ad blocker:', error)
+  }
 }
 
 function createWindow() {
@@ -231,6 +247,27 @@ ipcMain.on('shell:cancel-download', (_, id) => {
   }
 })
 
+ipcMain.handle('shell:get-shields-status', () => {
+  return shieldsActive
+})
+
+ipcMain.on('shell:toggle-shields', () => {
+  shieldsActive = !shieldsActive
+
+  if (blocker) {
+    if (shieldsActive) {
+      blocker.enableBlockingInSession(session.defaultSession)
+    } else {
+      blocker.disableBlockingInSession(session.defaultSession)
+    }
+  }
+
+  win?.webContents.send('shell:shields-update', shieldsActive)
+  if (view) {
+    view.webContents.reload() // Reload page to apply changes
+  }
+})
+
 ipcMain.handle('agent:scan', async () => {
   if (!view) return null
 
@@ -288,7 +325,8 @@ app.on('activate', () => {
   }
 })
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  await setupAdBlocker()
   createWindow()
   setupDownloadManager()
 })

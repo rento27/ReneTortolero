@@ -24,5 +24,10 @@ interface Window {
     onDownloadStart: (callback: (data: any) => void) => void
     onDownloadProgress: (callback: (data: any) => void) => void
     onDownloadComplete: (callback: (data: any) => void) => void
+
+    // AdBlock
+    toggleShields: () => void
+    getShieldsStatus: () => Promise<boolean>
+    onShieldsUpdate: (callback: (active: boolean) => void) => void
   }
 }

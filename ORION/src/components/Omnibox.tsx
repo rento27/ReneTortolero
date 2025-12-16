@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Star } from 'lucide-react';
+import { Star, Shield } from 'lucide-react';
 import { BookmarkItem } from '../types';
 
 interface OmniboxProps {
@@ -9,13 +9,24 @@ interface OmniboxProps {
 export const Omnibox: React.FC<OmniboxProps> = ({ onBookmarkUpdate }) => {
   const [url, setUrl] = useState('');
   const [isBookmarked, setIsBookmarked] = useState(false);
+  const [isShieldActive, setIsShieldActive] = useState(true);
 
   useEffect(() => {
     // Listen for URL changes from the main process
-    if (window.electron && window.electron.onUrlChange) {
-      window.electron.onUrlChange((newUrl) => {
-        setUrl(newUrl);
-        checkBookmarkStatus(newUrl);
+    if (window.electron) {
+      if (window.electron.onUrlChange) {
+        window.electron.onUrlChange((newUrl) => {
+          setUrl(newUrl);
+          checkBookmarkStatus(newUrl);
+        });
+      }
+
+      // Get initial shield status
+      window.electron.getShieldsStatus().then(setIsShieldActive);
+
+      // Listen for shield updates
+      window.electron.onShieldsUpdate((active) => {
+        setIsShieldActive(active);
       });
     }
   }, []);
@@ -84,14 +95,22 @@ export const Omnibox: React.FC<OmniboxProps> = ({ onBookmarkUpdate }) => {
       </div>
 
       {/* Input Field */}
-      <div className="flex-1 relative">
+      <div className="flex-1 relative flex items-center">
+        {/* Shield Icon */}
+        <div className="absolute left-2 z-10">
+           <Shield
+             size={14}
+             className={`${isShieldActive ? 'text-[#00F0FF]' : 'text-gray-600'}`}
+           />
+        </div>
+
         <input
           type="text"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Ingresa coordenadas o URL..."
-          className="w-full bg-[#111] border border-[#333] rounded px-4 py-1.5 pr-10 text-sm text-[#E0E0E0] focus:outline-none focus:border-[#00F0FF] focus:shadow-[0_0_5px_rgba(0,240,255,0.2)] placeholder-gray-600 font-mono"
+          className="w-full bg-[#111] border border-[#333] rounded px-4 py-1.5 pl-8 pr-10 text-sm text-[#E0E0E0] focus:outline-none focus:border-[#00F0FF] focus:shadow-[0_0_5px_rgba(0,240,255,0.2)] placeholder-gray-600 font-mono"
         />
 
         {/* Bookmark Star */}

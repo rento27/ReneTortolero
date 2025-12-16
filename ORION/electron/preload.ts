@@ -26,4 +26,9 @@ contextBridge.exposeInMainWorld('electron', {
   onDownloadStart: (callback: (data: any) => void) => ipcRenderer.on('download:start', (_, data) => callback(data)),
   onDownloadProgress: (callback: (data: any) => void) => ipcRenderer.on('download:progress', (_, data) => callback(data)),
   onDownloadComplete: (callback: (data: any) => void) => ipcRenderer.on('download:complete', (_, data) => callback(data)),
+
+  // AdBlock
+  toggleShields: () => ipcRenderer.send('shell:toggle-shields'),
+  getShieldsStatus: () => ipcRenderer.invoke('shell:get-shields-status'),
+  onShieldsUpdate: (callback: (active: boolean) => void) => ipcRenderer.on('shell:shields-update', (_, active) => callback(active))
 })

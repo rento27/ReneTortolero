@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Plus, Maximize, Printer, Search, History, Download, Settings,
-  Minus
+  Minus, Shield
 } from 'lucide-react';
 
 interface AppMenuProps {
@@ -12,6 +12,21 @@ interface AppMenuProps {
 }
 
 export const AppMenu: React.FC<AppMenuProps> = ({ onClose, onNewTab, onToggleFind, onOpenHistory }) => {
+  const [shieldsActive, setShieldsActive] = useState(true);
+
+  useEffect(() => {
+    if (window.electron && window.electron.getShieldsStatus) {
+      window.electron.getShieldsStatus().then(setShieldsActive);
+    }
+  }, []);
+
+  const toggleShields = () => {
+    if (window.electron && window.electron.toggleShields) {
+      window.electron.toggleShields();
+      setShieldsActive(!shieldsActive);
+    }
+  };
+
   return (
     <div className="absolute right-4 top-[50px] w-[280px] bg-[#0A0A0A] border border-[#00F0FF] rounded-lg shadow-[0_0_20px_rgba(0,240,255,0.2)] z-50 text-[#E0E0E0] font-mono text-sm">
       {/* Menu Header (Optional) */}
@@ -37,6 +52,22 @@ export const AppMenu: React.FC<AppMenuProps> = ({ onClose, onNewTab, onToggleFin
 
         <MenuItem icon={<Printer size={16} />} label="Imprimir..." onClick={() => { window.electron.printPage(); onClose(); }} shortcut="Ctrl+P" />
         <MenuItem icon={<Search size={16} />} label="Buscar en página..." onClick={() => { onToggleFind(); onClose(); }} shortcut="Ctrl+F" />
+
+        <div className="h-[1px] bg-[#333] my-2 mx-2" />
+
+        {/* Shield Toggle */}
+        <button
+          onClick={toggleShields}
+          className="w-full text-left px-4 py-2 flex items-center justify-between hover:bg-[#1A1A1D] transition-colors"
+        >
+           <span className="flex items-center gap-3">
+              <Shield size={16} className={shieldsActive ? "text-[#00F0FF]" : "text-gray-500"} />
+              <span className={shieldsActive ? "text-[#00F0FF]" : "text-gray-500"}>Escudos de Defensa</span>
+           </span>
+           <div className={`w-8 h-4 rounded-full flex items-center px-0.5 transition-colors ${shieldsActive ? 'bg-[#00F0FF]' : 'bg-[#333]'}`}>
+              <div className={`w-3 h-3 bg-black rounded-full transition-transform ${shieldsActive ? 'translate-x-4' : 'translate-x-0'}`}></div>
+           </div>
+        </button>
 
         <div className="h-[1px] bg-[#333] my-2 mx-2" />
 
