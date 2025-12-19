@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" class="">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,10 +11,10 @@
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@400;700&family=Exo+2:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
 
     <!-- Google Material Symbols -->
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
 
     <!-- Custom Styles -->
     <link rel="stylesheet" href="styles/styles.css">
@@ -26,7 +26,6 @@
                     fontFamily: {
                         orbitron: ['Orbitron', 'sans-serif'],
                         rajdhani: ['Rajdhani', 'sans-serif'],
-                        exo2: ['Exo 2', 'sans-serif'],
                     },
                     colors: {
                         'neon-purple': '#A020F0',
@@ -34,52 +33,134 @@
                         'deep-space-black': '#0D0D1A',
                         'text-primary': '#E0E0E0',
                         'text-secondary': '#A0A0A0',
+                        'glass-bg': 'rgba(13, 13, 26, 0.6)',
+                        'border-glow': 'rgba(160, 32, 240, 0.3)',
+                        'success': '#34D399',
+                        'warning': '#FBBF24',
+                        'danger': '#F471B5',
                     }
                 }
             }
         }
     </script>
+    <style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
 </head>
-<body class="bg-deep-space-black font-rajdhani text-text-primary">
 
-    <div id="app-container" class="flex">
-        <!-- Sidebar will be loaded here -->
-        <div id="sidebar-container"></div>
+<body class="bg-deep-space-black font-rajdhani text-text-primary flex scroll-smooth">
 
-        <div class="flex-1 flex flex-col">
-            <!-- Header will be loaded here -->
-            <div id="header-container"></div>
+    <!-- Sidebar Container -->
+    <div id="sidebar-container"></div>
 
-            <!-- Main Content -->
-            <main class="p-8">
-                <h1 class="text-4xl font-orbitron text-neon-purple">Brief de Investigación</h1>
-                <p class="mt-2 text-text-secondary">Compilando inteligencia para la misión.</p>
-                <!-- More content will go here -->
-            </main>
+    <!-- Main Content -->
+    <div class="flex-1 flex flex-col">
 
-            <!-- Footer will be loaded here -->
-            <div id="footer-container"></div>
-        </div>
+        <!-- Header Container -->
+        <div id="header-container"></div>
+
+        <!-- Main Content -->
+        <main class="p-6 flex-grow">
+            <!-- Top Status Panel -->
+            <div class="mb-8 flex flex-col md:flex-row gap-6 items-start justify-between glassmorphism p-6 rounded-lg shadow-lg">
+                <div class="flex-1 w-full">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <h1 class="font-orbitron text-2xl font-bold text-neon-purple mb-1">PROTOCOLO DE INVESTIGACIÓN</h1>
+                            <p class="text-sm text-text-secondary font-orbitron">Estado: <span class="text-warning font-semibold">EN PROGRESO</span></p>
+                        </div>
+                        <div class="flex flex-col items-end">
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input class="sr-only peer" type="checkbox" value=""/>
+                                <div class="w-14 h-7 bg-deep-space-black/50 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-vibrant-orange rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-vibrant-orange"></div>
+                                <span class="ml-3 text-sm font-medium text-white font-orbitron">RESEARCH LOCK</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-12 gap-6">
+                <!-- Left Column -->
+                <div class="col-span-12 lg:col-span-8 space-y-6">
+                    <!-- Summary -->
+                    <div class="glassmorphism p-6 rounded-lg"><label class="block text-xs font-orbitron text-vibrant-orange uppercase tracking-wider">01 // Resumen (5 líneas)</label><textarea class="w-full bg-deep-space-black/50 border-neon-purple/50 rounded-md text-text-primary focus:ring-vibrant-orange focus:border-vibrant-orange font-rajdhani text-sm p-4 mt-2" placeholder="Resumen ejecutivo del tema..." rows="5"></textarea></div>
+
+                    <!-- Verified Facts -->
+                    <div class="glassmorphism p-6 rounded-lg">
+                        <div class="flex justify-between items-center mb-4"><label class="block text-xs font-orbitron text-vibrant-orange uppercase tracking-wider">02 // Hechos Verificados (Con fuente)</label><button class="text-xs text-vibrant-orange hover:text-deep-space-black hover:bg-vibrant-orange px-3 py-1.5 rounded-full transition-colors border border-vibrant-orange/50 bg-vibrant-orange/10 font-orbitron flex items-center gap-1"><span class="material-symbols-outlined text-sm">add</span> Añadir Hecho</button></div>
+                        <div class="space-y-4">
+                            <div class="flex gap-4 items-start bg-deep-space-black/40 p-3 rounded-lg border border-neon-purple/20"><span class="font-orbitron text-vibrant-orange mt-1 text-sm">1.</span><div class="flex-1"><textarea class="w-full bg-transparent border-none focus:ring-0 text-text-primary text-sm p-0" placeholder="Escribe el hecho verificado aquí..." rows="2"></textarea><div class="flex items-center gap-2 border-t border-neon-purple/20 pt-2 mt-1"><span class="material-symbols-outlined text-text-secondary text-base">link</span><input class="flex-1 bg-transparent border-none focus:ring-0 text-xs text-neon-purple font-rajdhani" placeholder="Pegar URL de la fuente..." type="text"/></div></div><button class="text-text-secondary hover:text-danger transition-colors p-1"><span class="material-symbols-outlined text-sm">delete</span></button></div>
+                            <div class="flex gap-4 items-start bg-deep-space-black/40 p-3 rounded-lg border border-neon-purple/20"><span class="font-orbitron text-vibrant-orange mt-1 text-sm">2.</span><div class="flex-1"><textarea class="w-full bg-transparent border-none focus:ring-0 text-text-primary text-sm p-0" placeholder="Escribe el hecho verificado aquí..." rows="2"></textarea><div class="flex items-center gap-2 border-t border-neon-purple/20 pt-2 mt-1"><span class="material-symbols-outlined text-text-secondary text-base">link</span><input class="flex-1 bg-transparent border-none focus:ring-0 text-xs text-neon-purple font-rajdhani" placeholder="Pegar URL de la fuente..." type="text"/></div></div><button class="text-text-secondary hover:text-danger transition-colors p-1"><span class="material-symbols-outlined text-sm">delete</span></button></div>
+                        </div>
+                    </div>
+
+                    <!-- Narrative Angles -->
+                    <div class="glassmorphism p-6 rounded-lg"><label class="block text-xs font-orbitron text-vibrant-orange uppercase mb-4 tracking-wider">05 // 3 Ángulos Narrativos Sugeridos</label><div class="grid grid-cols-1 md:grid-cols-3 gap-4"><input class="w-full bg-deep-space-black/50 border-neon-purple/50 rounded-md text-text-primary focus:ring-vibrant-orange focus:border-vibrant-orange text-sm h-12 px-3" placeholder="Ángulo #1" type="text"/><input class="w-full bg-deep-space-black/50 border-neon-purple/50 rounded-md text-text-primary focus:ring-vibrant-orange focus:border-vibrant-orange text-sm h-12 px-3" placeholder="Ángulo #2" type="text"/><input class="w-full bg-deep-space-black/50 border-neon-purple/50 rounded-md text-text-primary focus:ring-vibrant-orange focus:border-vibrant-orange text-sm h-12 px-3" placeholder="Ángulo #3" type="text"/></div></div>
+                </div>
+
+                <!-- Right Column -->
+                <div class="col-span-12 lg:col-span-4 space-y-6">
+                    <!-- Asset Preview -->
+                    <div class="glassmorphism p-1 rounded-lg"><div class="rounded-md h-48 bg-deep-space-black/50 flex items-center justify-center"><h4 class="font-orbitron text-white text-lg font-bold">ASSET PREVIEW</h4></div><div class="p-3 border-t border-neon-purple/20 bg-deep-space-black/30"><p class="text-xs text-text-secondary font-orbitron">Character Model: v2.4 (Approved)</p></div></div>
+
+                    <!-- Source Management -->
+                    <div class="glassmorphism p-6 rounded-lg">
+                        <div class="flex justify-between items-center mb-4"><label class="block text-xs font-orbitron text-vibrant-orange uppercase tracking-wider">07 // Gestión de Fuentes</label><span class="text-[10px] text-text-secondary font-orbitron bg-deep-space-black/50 px-2 py-1 rounded-full border border-neon-purple/20">2 Links Added</span></div>
+                        <div class="p-4 rounded-lg bg-deep-space-black/40 border border-neon-purple/20"><div class="flex-1 space-y-3"><div><label class="text-[10px] font-orbitron text-text-secondary mb-1 block">Título</label><input class="w-full bg-deep-space-black/50 border-neon-purple/50 rounded-md px-2 py-1.5 text-xs text-white" type="text" value="Black Hole Thermodynamics"/></div><div><label class="text-[10px] font-orbitron text-text-secondary mb-1 block">URL</label><input class="w-full bg-transparent p-0 text-xs text-neon-purple font-rajdhani" type="text" value="https://nasa.gov/blackholes/thermo"/></div></div></div>
+                        <button class="w-full mt-3 py-2.5 border border-dashed border-neon-purple/50 rounded-lg text-xs text-text-secondary hover:text-vibrant-orange hover:border-vibrant-orange transition-colors flex items-center justify-center gap-2"><span class="material-symbols-outlined text-sm">add</span><span class="font-orbitron uppercase tracking-wider">Añadir Fuente</span></button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Validation Panel -->
+            <div class="mt-6 glassmorphism p-6 rounded-lg flex flex-col md:flex-row items-center justify-between gap-6">
+                <div class="flex items-start gap-4 max-w-2xl"><div class="w-12 h-12 rounded-lg bg-success/10 flex items-center justify-center flex-shrink-0 border border-success/20"><span class="material-symbols-outlined text-success text-2xl">gavel</span></div><div><h3 class="text-sm font-orbitron font-bold text-white uppercase tracking-wider mb-1">Validación del Brief</h3><p class="text-xs text-text-secondary font-rajdhani leading-relaxed"><span class="text-success font-bold">&gt; CHECK:</span> "Aprobar" bloqueará la investigación. "Rechazar" solicitará ajustes.</p></div></div>
+                <div class="flex items-center gap-4 w-full md:w-auto">
+                    <button class="flex-1 md:flex-none px-6 py-3 rounded-lg border border-danger/50 text-danger hover:bg-danger hover:text-white font-orbitron text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2"><span class="material-symbols-outlined text-lg">thumb_down</span> Rechazar</button>
+                    <button class="flex-1 md:flex-none px-8 py-3 rounded-lg bg-success text-deep-space-black font-orbitron text-xs font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2"><span class="material-symbols-outlined text-lg">verified</span> Aprobar & Bloquear</button>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer Container -->
+        <div id="footer-container"></div>
     </div>
 
     <script>
-        // Simple script to load reusable components
-        fetch('components/sidebar.html')
-            .then(response => response.text())
-            .then(data => {
-                document.getElementById('sidebar-container').innerHTML = data;
-            });
-        fetch('components/header.html')
-            .then(response => response.text())
-            .then(data => {
-                document.getElementById('header-container').innerHTML = data;
-            });
-        fetch('components/footer.html')
-            .then(response => response.text())
-            .then(data => {
-                document.getElementById('footer-container').innerHTML = data;
-            });
-    </script>
+        const loadComponent = (url, containerId) => {
+            fetch(url)
+                .then(response => response.text())
+                .then(data => {
+                    document.getElementById(containerId).innerHTML = data;
+                    if (containerId === 'sidebar-container') {
+                        const event = new CustomEvent('sidebarLoaded');
+                        document.dispatchEvent(event);
+                    }
+                });
+        };
 
+        document.addEventListener('DOMContentLoaded', () => {
+            loadComponent('components/sidebar.html', 'sidebar-container');
+            loadComponent('components/header.html', 'header-container');
+            loadComponent('components/footer.html', 'footer-container');
+        });
+
+        document.addEventListener('sidebarLoaded', () => {
+            const currentPath = window.location.pathname.split('/').pop();
+            const navLinks = document.querySelectorAll('#sidebar-container nav a');
+            navLinks.forEach(link => {
+                if (link.getAttribute('href') === 'brief.html') {
+                    link.classList.add('bg-neon-purple/20', 'text-text-primary');
+                    link.classList.remove('text-text-secondary');
+                } else {
+                    link.classList.remove('bg-neon-purple/20', 'text-text-primary');
+                    link.classList.add('text-text-secondary');
+                }
+            });
+        });
+    </script>
 </body>
 </html>
