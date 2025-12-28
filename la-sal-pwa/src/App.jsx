@@ -5,6 +5,7 @@ import {
   ChefHat, Music, Wine, Utensils, Baby, AlertCircle, CheckCircle, Search, Filter
 } from 'lucide-react';
 
+// Conexión con Supabase
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
@@ -20,18 +21,17 @@ export default function App() {
 
   useEffect(() => {
     fetchReservations();
+    // Suscripción en tiempo real
     const channel = supabase
-      .channel('schema-db-changes')
+      .channel('cambios-reales')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'reservaciones' }, () => fetchReservations())
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, []);
 
   async function fetchReservations() {
-    // If connected to real DB, this works. For now, if empty, we can seed dummy data?
-    // But user provided code assumes real DB. I will keep it as is.
     const { data } = await supabase.from('reservaciones').select('*').order('created_at', { ascending: false });
-    if (data) setReservations(data);
+    setReservations(data || []);
     setLoading(false);
   }
 
@@ -56,69 +56,69 @@ export default function App() {
 
   const formatCurr = (n) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(n);
 
-  // Cálculos Globales
+  // Cálculos para la barra superior
   const totalAdults = reservations.reduce((acc, r) => acc + (r.adultos || 0), 0);
   const totalKids = reservations.reduce((acc, r) => acc + (r.ninos || 0), 0);
   const totalRecaudado = reservations.reduce((acc, r) => acc + (r.monto_pagado || 0), 0);
   const totalEventValue = reservations.reduce((acc, r) => acc + (r.adultos * PRICE_ADULT) + (r.ninos * PRICE_KID), 0);
   const totalFalta = totalEventValue - totalRecaudado;
 
+  if (loading) return <div className="p-10 text-center font-serif">Cargando laSal playa...</div>;
+
   return (
     <div className="min-h-screen bg-[#F8F9FA] font-sans pb-20">
 
-      {/* HEADER / LOGO SECTION */}
+      {/* SECCIÓN DE LOGO Y BIENVENIDA */}
       <header className="pt-12 pb-8 px-4 text-center bg-white border-b border-slate-100">
         <div className="flex justify-center mb-4">
-          <div className="w-24 h-24 rounded-full border border-slate-200 flex items-center justify-center p-4 relative">
-             <img src="https://cdn-icons-png.flaticon.com/512/3655/3655682.png" className="w-10 opacity-20 absolute" alt="" />
-             <span className="text-xs font-serif font-light leading-tight">laSal playa</span>
+          <div className="w-24 h-24 rounded-full border border-slate-200 flex items-center justify-center p-4 relative overflow-hidden">
+             <span className="text-[10px] font-serif font-light leading-tight text-center">laSal playa</span>
           </div>
         </div>
         <h1 className="text-6xl font-serif tracking-tighter mb-1">la<span className="font-bold text-[#EAB308]">Sal</span></h1>
         <p className="text-[10px] tracking-[0.6em] uppercase text-slate-400 mb-8">P L A Y A</p>
 
-        <p className="text-slate-400 text-xs uppercase tracking-[0.3em] mb-2">BIENVENIDO 2026</p>
-        <h2 className="text-4xl font-serif italic text-slate-800 mb-6">Fiesta de Año Nuevo</h2>
+        <p className="text-slate-400 text-[10px] uppercase tracking-[0.3em] mb-2 font-bold">BIENVENIDO 2026</p>
+        <h2 className="text-4xl font-serif italic text-slate-800 mb-6 font-light">Fiesta de Año Nuevo</h2>
 
         <div className="flex justify-center gap-3">
-          <span className="bg-white border border-slate-100 px-4 py-1.5 rounded-full text-[10px] font-bold text-slate-500 flex items-center gap-2 shadow-sm">
+          <span className="bg-white border border-slate-100 px-4 py-1.5 rounded-full text-[10px] font-bold text-slate-500 flex items-center gap-2 shadow-sm uppercase tracking-wider">
             <Music size={12} className="text-amber-500" /> DJ Bob
           </span>
-          <span className="bg-white border border-slate-100 px-4 py-1.5 rounded-full text-[10px] font-bold text-slate-500 flex items-center gap-2 shadow-sm">
+          <span className="bg-white border border-slate-100 px-4 py-1.5 rounded-full text-[10px] font-bold text-slate-500 flex items-center gap-2 shadow-sm uppercase tracking-wider">
             <Wine size={12} className="text-amber-500" /> Kit de Celebración
           </span>
         </div>
       </header>
 
-      {/* MENU & INFO SECTION */}
+      {/* MENÚ Y PRECIOS */}
       <div className="max-w-6xl mx-auto p-4 md:p-8">
-        <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden flex flex-col md:row flex-wrap lg:flex-nowrap">
-          {/* Menú */}
-          <div className="p-8 flex-1 border-b md:border-b-0 md:border-r border-slate-100">
-            <h3 className="flex items-center gap-3 text-lg font-bold text-slate-800 mb-6">
+        <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden flex flex-wrap lg:flex-nowrap">
+          {/* Columna Menú */}
+          <div className="p-8 flex-1 border-b lg:border-b-0 lg:border-r border-slate-100">
+            <h3 className="flex items-center gap-3 text-lg font-bold text-slate-800 mb-6 uppercase tracking-tight">
               <ChefHat size={20} className="text-amber-500" /> Menú Degustación
             </h3>
             <div className="space-y-6">
               <div>
-                <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-1">Entrada</p>
-                <p className="text-sm font-bold text-slate-800">Amouse bouche: <span className="font-normal text-slate-600 uppercase text-xs tracking-tight">Crema de langosta en pan de hogaza, manzana con trufa negra.</span></p>
-                <p className="text-[10px] italic text-slate-400 mt-1">o Lechuga asada, frutos secos, queso azul y panal de miel.</p>
+                <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest mb-1">Entrada</p>
+                <p className="text-sm font-bold text-slate-800 italic">Amouse bouche: <span className="font-normal text-slate-600 not-italic">Crema de langosta en pan de hogaza, manzana con trufa negra.</span></p>
               </div>
               <div>
-                <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-2">Plato Fuerte</p>
+                <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest mb-2">Plato Fuerte</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                    <p className="text-xs font-bold mb-1 uppercase">Tierra</p>
-                    <p className="text-[11px] text-slate-500 leading-relaxed">Short rib y gratin de papa con salsa de frutos rojos y setas.</p>
+                    <p className="text-[10px] font-black mb-1 uppercase text-slate-400">Tierra</p>
+                    <p className="text-[11px] text-slate-600 font-medium leading-relaxed">Short rib y gratin de papa con salsa de frutos rojos y setas.</p>
                   </div>
                   <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                    <p className="text-xs font-bold mb-1 uppercase">Mar</p>
-                    <p className="text-[11px] text-slate-500 leading-relaxed">Pescado al vapor con uvas, alcachofas y salsa de mejillones.</p>
+                    <p className="text-[10px] font-black mb-1 uppercase text-slate-400">Mar</p>
+                    <p className="text-[11px] text-slate-600 font-medium leading-relaxed">Pescado al vapor con uvas, alcachofas y salsa de mejillones.</p>
                   </div>
                 </div>
               </div>
               <div>
-                <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-1">Postre</p>
+                <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest mb-1">Postre</p>
                 <p className="text-xs text-slate-600 font-medium">Tarta de queso con salsa de frutos rojos y helado de yogurt.</p>
               </div>
             </div>
@@ -127,37 +127,37 @@ export default function App() {
           {/* Lateral Info */}
           <div className="p-8 w-full lg:w-80 bg-slate-50/50 space-y-8">
             <div>
-              <h4 className="flex items-center gap-2 text-xs font-bold text-slate-800 mb-3 uppercase">
+              <h4 className="flex items-center gap-2 text-[10px] font-black text-slate-400 mb-3 uppercase tracking-widest">
                 <DollarSign size={14} className="text-amber-500" /> Precios
               </h4>
               <div className="space-y-2">
                 <div className="bg-white p-3 rounded-lg border border-slate-200 flex justify-between items-center shadow-sm">
-                  <span className="text-xs text-slate-500">Adultos</span>
-                  <span className="text-xs font-black tracking-tight">$1,900</span>
+                  <span className="text-xs font-medium text-slate-500 uppercase tracking-tighter">Adultos</span>
+                  <span className="text-sm font-black text-slate-800 tracking-tight">$1,900</span>
                 </div>
                 <div className="bg-white p-3 rounded-lg border border-slate-200 flex justify-between items-center shadow-sm">
-                  <span className="text-xs text-slate-500">Niños</span>
-                  <span className="text-xs font-black tracking-tight">$900</span>
+                  <span className="text-xs font-medium text-slate-500 uppercase tracking-tighter">Niños</span>
+                  <span className="text-sm font-black text-slate-800 tracking-tight">$900</span>
                 </div>
               </div>
             </div>
             <div>
-              <h4 className="flex items-center gap-2 text-xs font-bold text-slate-800 mb-2 uppercase">
+              <h4 className="flex items-center gap-2 text-[10px] font-black text-slate-400 mb-2 uppercase tracking-widest">
                 <MapPin size={14} className="text-amber-500" /> Ubicación
               </h4>
-              <p className="text-[10px] leading-relaxed text-slate-500">
+              <p className="text-[11px] leading-relaxed text-slate-600 font-medium">
                 Av. Lázaro Cárdenas #797<br/>
                 Col. Las brisas (frente al estadio)
               </p>
             </div>
-            <button className="w-full bg-[#222] text-white py-4 rounded-xl font-bold text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-black transition-all shadow-lg">
+            <button className="w-full bg-[#222] text-white py-4 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-2 hover:bg-black transition-all shadow-lg">
               <Sparkles size={14} /> Agregar Nueva Reserva
             </button>
           </div>
         </div>
       </div>
 
-      {/* STATS BAR */}
+      {/* BARRA DE ESTADÍSTICAS */}
       <div className="max-w-7xl mx-auto px-4 grid grid-cols-2 md:grid-cols-5 gap-3 mb-10">
         {[
           { label: 'Total', value: totalAdults + totalKids, color: 'border-blue-500', icon: <Utensils size={14}/> },
