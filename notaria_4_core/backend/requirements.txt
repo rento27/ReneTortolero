@@ -1,0 +1,9 @@
+fastapi==0.109.2
+uvicorn==0.27.1
+satcfdi==0.0.25
+spacy==3.7.2
+pytesseract==0.3.10
+pymupdf==1.23.22
+google-cloud-secret-manager==2.18.0
+Pillow==10.2.0
+python-multipart==0.0.9
