@@ -20,7 +20,9 @@
                 <h3>Experiencia</h3>
 
                 <h3>Documental de Freddie Mercury</h3>
-                <video src="vio.mp4"controls poster="video/war.mp4" width="500px" height="500px"><br/>
+                <!-- Bolt: Added preload="none" to prevent downloading 2.7MB video on initial load -->
+                <!-- Bolt: Removed invalid poster attribute pointing to non-existent video file -->
+                <video src="vio.mp4" controls preload="none" width="500px" height="500px"><br/>
 
                 </video>
 
