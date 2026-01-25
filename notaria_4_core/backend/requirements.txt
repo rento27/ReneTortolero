@@ -1,0 +1,11 @@
+fastapi==0.109.0
+uvicorn==0.27.0
+satcfdi==4.0.0
+spacy==3.7.4
+pytesseract==0.3.10
+pymupdf==1.23.8
+google-cloud-secret-manager==2.18.0
+python-multipart==0.0.9
+firebase-admin==6.4.0
+pytest==8.0.0
+weasyprint==60.2
