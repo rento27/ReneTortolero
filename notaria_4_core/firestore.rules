@@ -1,0 +1,31 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper function to check if user is admin
+    function isAdmin() {
+      return request.auth.token.admin == true;
+    }
+
+    // Expedientes: Prevent modification if status is 'Timbrado'
+    match /expedientes/{expedienteId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update: if (resource.data.status != 'Timbrado' || isAdmin()) && request.auth != null;
+      allow delete: if isAdmin();
+    }
+
+    // Facturas: Immutable once created, only readable by owner or admin
+    match /facturas/{facturaId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null; // Typically created by backend service account
+      allow update: if false; // Facturas should be immutable
+      allow delete: if false;
+    }
+
+    // Clientes: Standard access
+    match /clientes/{clienteId} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
