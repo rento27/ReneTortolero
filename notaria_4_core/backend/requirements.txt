@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+satcfdi>=4.0.0
+spacy>=3.0.0
+pytesseract
+pymupdf
+google-cloud-secret-manager
+firebase-admin
+pytest
+httpx
+python-multipart
+# Additional dependencies for robust calculation
