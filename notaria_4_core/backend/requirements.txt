@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+satcfdi==4.0.0
+spacy==3.7.4
+google-cloud-secret-manager
+pymupdf
+pytesseract
+weasyprint
+firebase-admin
+python-multipart
