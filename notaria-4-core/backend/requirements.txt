@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+satcfdi
+spacy
+pytesseract
+pymupdf
+google-cloud-secret-manager
+python-multipart
