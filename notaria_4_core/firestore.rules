@@ -1,0 +1,36 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper function to check auth
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Expedientes: The core record of the deed
+    match /expedientes/{expedienteId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+
+      // "Digital Lock": Prevent modification if status is 'Timbrado'
+      // Unless the user has the 'admin' custom claim (e.g., the Notary himself)
+      allow update: if isAuthenticated() &&
+                    (resource.data.status != 'Timbrado' || request.auth.token.admin == true);
+    }
+
+    // Facturas: The fiscal record
+    match /facturas/{facturaId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+
+      // Facturas should definitely not be touched after Timbrado unless cancelling
+      allow update: if isAuthenticated() &&
+                    (resource.data.status != 'Timbrado' || request.auth.token.admin == true);
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
