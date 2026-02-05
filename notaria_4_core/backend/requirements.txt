@@ -1,0 +1,11 @@
+satcfdi>=4.0.0
+spacy>=3.0.0
+fastapi
+uvicorn
+google-cloud-secret-manager
+pymupdf
+pytesseract
+firebase-admin
+pytest
+httpx
+python-multipart
