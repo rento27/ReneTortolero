@@ -79,10 +79,34 @@ def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal
     # Standard rounding to 2 decimals for currency
     return isai.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
-def calculate_retentions(rfc_receptor: str, subtotal: Decimal, iva_rate: Decimal = Decimal("0.16")) -> dict:
+def calculate_taxable_base(concepts: list[dict]) -> Decimal:
+    """
+    Calculates the total taxable base from a list of concepts.
+    Only concepts with ObjetoImp '02' (Sí objeto de impuesto) are included.
+    Returns the sum of their 'importe' values.
+    """
+    taxable_base = Decimal("0.00")
+    for concept in concepts:
+        # Check if concept is taxable (02)
+        # Note: 'objeto_imp' key might vary if coming from Pydantic model dump or dict. We assume standard keys.
+        obj_imp = concept.get('objeto_imp')
+        if obj_imp == '02':
+            # Safely convert to Decimal if needed (e.g. if it's a string/float)
+            importe = concept.get('importe', 0)
+            if not isinstance(importe, Decimal):
+                importe = Decimal(str(importe))
+            taxable_base += importe
+    return taxable_base
+
+def calculate_retentions(rfc_receptor: str, taxable_base: Decimal, iva_rate: Decimal = Decimal("0.16")) -> dict:
     """
     Calculates retentions if the receptor is a Persona Moral (RFC length == 12).
-    Returns a dictionary with retention amounts.
+
+    :param rfc_receptor: RFC of the receptor.
+    :param taxable_base: The base amount subject to tax (sum of concepts with ObjetoImp '02').
+                         Do NOT pass the total subtotal if it includes non-taxable items.
+    :param iva_rate: IVA rate (default 16%).
+    :return: Dictionary with retention amounts.
     """
     retentions = {
         "isr": Decimal("0.00"),
@@ -95,13 +119,13 @@ def calculate_retentions(rfc_receptor: str, subtotal: Decimal, iva_rate: Decimal
     if len(rfc_receptor.strip()) == 12:
         retentions["is_moral"] = True
 
-        # ISR Retention: 10% of Subtotal
-        retentions["isr"] = (subtotal * ISR_RETENTION_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        # ISR Retention: 10% of Taxable Base
+        retentions["isr"] = (taxable_base * ISR_RETENTION_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
         # IVA Retention: 2/3 of the IVA amount
-        # IVA Amount = Subtotal * iva_rate
+        # IVA Amount = Taxable Base * iva_rate
         # Ret = IVA Amount * (2/3)
-        iva_amount = subtotal * iva_rate
+        iva_amount = taxable_base * iva_rate
         ret_iva = iva_amount * (Decimal("2") / Decimal("3"))
         retentions["iva"] = ret_iva.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 

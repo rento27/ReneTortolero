@@ -9,7 +9,7 @@ except ImportError:
     cfdi40 = None
     Signer = None
 
-from .fiscal_engine import validate_copropiedad, calculate_retentions
+from .fiscal_engine import validate_copropiedad, calculate_retentions, calculate_taxable_base
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,14 @@ def generate_signed_xml(invoice_data: dict) -> bytes:
     # 2. Build Taxes (Impuestos)
     # We re-calculate to ensure consistency with the fiscal engine
     impuestos = None
-    retentions = calculate_retentions(invoice_data['receptor']['rfc'], Decimal(str(invoice_data['subtotal'])))
+
+    # Calculate taxable base (only concepts with ObjetoImp '02' are subject to retention)
+    taxable_base = calculate_taxable_base(invoice_data['conceptos'])
+
+    retentions = calculate_retentions(
+        rfc_receptor=invoice_data['receptor']['rfc'],
+        taxable_base=taxable_base
+    )
 
     if retentions['is_moral']:
         # Construct Impuestos node
