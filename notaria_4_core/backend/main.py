@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional, Any
 from decimal import Decimal
-from lib.fiscal_engine import sanitize_name, calculate_isai_manzanillo, calculate_retentions, validate_postal_code
+from lib.fiscal_engine import sanitize_name, calculate_isai_manzanillo, calculate_retentions, validate_postal_code, calculate_taxable_base
 from lib.xml_generator import generate_signed_xml
 
 app = FastAPI(title="Notaria 4 Digital Core API", version="1.0.0")
@@ -53,9 +53,12 @@ def create_cfdi(request: InvoiceRequest):
          raise HTTPException(status_code=400, detail=f"Invalid Postal Code: {data['receptor']['domicilio_fiscal']}")
 
     # 2. Calculate Retentions (Logic Check)
+    # Calculate taxable base (only concepts with ObjetoImp '02' are subject to retention)
+    taxable_base = calculate_taxable_base(data['conceptos'])
+
     retentions = calculate_retentions(
-        data['receptor']['rfc'],
-        data['subtotal']
+        rfc_receptor=data['receptor']['rfc'],
+        taxable_base=taxable_base
     )
 
     # 3. Generate XML
