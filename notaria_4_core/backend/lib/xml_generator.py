@@ -49,13 +49,17 @@ def generate_signed_xml(invoice_data: dict) -> bytes:
     # 3. Construct Comprobante
     # Using hardcoded Emisor for Notaria 4 as per prompt context
     try:
+        # Optimized for satcfdi v4:
+        # - Use snake_case arguments (required by v4 API)
+        # - Remove explicit 'Importe', 'SubTotal', 'Total' (auto-calculated)
+        # - Remove 'Impuestos' from constructor (injected later to support legacy global tax logic)
         cfdi = cfdi40.Comprobante(
-            Emisor={
+            emisor={
                 'Rfc': 'TOSR520601AZ4',
                 'RegimenFiscal': '612',
                 'Nombre': 'RENE MANUEL TORTOLERO SANTILLANA'
             },
-            Receptor={
+            receptor={
                 'Rfc': invoice_data['receptor']['rfc'],
                 'Nombre': invoice_data['receptor']['nombre'],
                 'UsoCFDI': invoice_data['receptor']['uso_cfdi'],
@@ -63,25 +67,34 @@ def generate_signed_xml(invoice_data: dict) -> bytes:
                 'RegimenFiscalReceptor': '601' # Default to General de Ley PM or logic needed
                 # Note: The prompt implies strictly validating this from data
             },
-            Conceptos=[
+            conceptos=[
                 {
                     'ClaveProdServ': c['clave_prod_serv'],
                     'Cantidad': Decimal(str(c['cantidad'])),
                     'ClaveUnidad': c['clave_unidad'],
                     'Descripcion': c['descripcion'],
                     'ValorUnitario': Decimal(str(c['valor_unitario'])),
-                    'Importe': Decimal(str(c['importe'])),
+                    # 'Importe': Removed (auto-calculated by satcfdi)
                     'ObjetoImp': c['objeto_imp']
                 } for c in invoice_data['conceptos']
             ],
-            SubTotal=Decimal(str(invoice_data['subtotal'])),
-            Moneda='MXN',
-            Total=Decimal(str(invoice_data['total'])),
-            TipoDeComprobante='I',
-            LugarExpedicion='28200',
-            Impuestos=impuestos,
-            Exportacion='01' # No aplica
+            # SubTotal: Removed (auto-calculated by satcfdi)
+            moneda='MXN',
+            # Total: Removed (auto-calculated by satcfdi initially)
+            tipo_de_comprobante='I',
+            lugar_expedicion='28200',
+            exportacion='01' # No aplica
         )
+
+        # Inject Impuestos and update Total explicitly
+        # This preserves the original logic which relied on explicit values from invoice_data,
+        # while complying with satcfdi's constructor requirements.
+        if impuestos:
+            cfdi['Impuestos'] = impuestos
+
+        # Explicitly set Total from input data to ensure it matches business logic/calculation
+        # This overrides satcfdi's auto-calculated Total (which might be just SubTotal if taxes aren't fully in concepts)
+        cfdi['Total'] = Decimal(str(invoice_data['total']))
 
         # 4. Complemento Notarios (Stub logic)
         # if 'complemento_notarios' in invoice_data:
