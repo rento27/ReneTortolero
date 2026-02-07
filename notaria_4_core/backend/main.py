@@ -12,6 +12,7 @@ class Receptor(BaseModel):
     nombre: str
     uso_cfdi: str
     domicilio_fiscal: str
+    regimen_fiscal: str # Added for dynamic fiscal regime
 
 class Concepto(BaseModel):
     clave_prod_serv: str
@@ -27,12 +28,90 @@ class Copropietario(BaseModel):
     rfc: str
     porcentaje: Decimal
 
+# --- Notarios Complement Models ---
+
+class DatosNotarioModel(BaseModel):
+    num_notaria: int = 4
+    entidad_federativa: str = "06"
+    adscripcion: str = "MANZANILLO COLIMA"
+    curp: str # Notary CURP is mandatory
+
+class DescInmuebleModel(BaseModel):
+    tipo_inmueble: str
+    calle: str
+    no_exterior: Optional[str] = None
+    no_interior: Optional[str] = None
+    colonia: Optional[str] = None
+    localidad: Optional[str] = None
+    referencia: Optional[str] = None
+    municipio: str
+    estado: str
+    pais: str
+    codigo_postal: str
+
+class DatosOperacionModel(BaseModel):
+    num_instrumento_notarial: int
+    fecha_inst_notarial: str # YYYY-MM-DD
+    monto_operacion: Decimal
+    subtotal: Decimal
+    iva: Decimal
+
+class DatosAdquirienteCopSCModel(BaseModel):
+    nombre: str
+    rfc: str
+    porcentaje: Decimal
+    apellido_paterno: Optional[str] = None
+    apellido_materno: Optional[str] = None
+    curp: Optional[str] = None
+
+class DatosUnAdquirienteModel(BaseModel):
+    nombre: str
+    rfc: str
+    apellido_paterno: Optional[str] = None
+    apellido_materno: Optional[str] = None
+    curp: Optional[str] = None
+
+class DatosAdquirienteModel(BaseModel):
+    copro_soc_conyugal_e: str # Si/No
+    datos_un_adquiriente: Optional[DatosUnAdquirienteModel] = None
+    datos_adquirientes_cop_sc: Optional[List[DatosAdquirienteCopSCModel]] = None
+
+class DatosEnajenanteCopSCModel(BaseModel):
+    nombre: str
+    rfc: str
+    porcentaje: Decimal
+    apellido_paterno: Optional[str] = None
+    apellido_materno: Optional[str] = None
+    curp: Optional[str] = None
+
+class DatosUnEnajenanteModel(BaseModel):
+    nombre: str
+    rfc: str
+    apellido_paterno: Optional[str] = None
+    apellido_materno: Optional[str] = None
+    curp: Optional[str] = None
+
+class DatosEnajenanteModel(BaseModel):
+    copro_soc_conyugal_e: str # Si/No
+    datos_un_enajenante: Optional[DatosUnEnajenanteModel] = None
+    datos_enajenantes_cop_sc: Optional[List[DatosEnajenanteCopSCModel]] = None
+
+class ComplementoNotariosModel(BaseModel):
+    datos_notario: Optional[DatosNotarioModel] = None
+    desc_inmuebles: List[DescInmuebleModel]
+    datos_operacion: DatosOperacionModel
+    datos_adquiriente: DatosAdquirienteModel
+    datos_enajenante: DatosEnajenanteModel
+
+# ----------------------------------
+
 class InvoiceRequest(BaseModel):
     receptor: Receptor
     conceptos: List[Concepto]
     subtotal: Decimal
     total: Decimal
     copropietarios: Optional[List[Copropietario]] = None
+    complemento_notarios: Optional[ComplementoNotariosModel] = None
     datos_extra: Optional[dict] = None
 
 @app.get("/health")
