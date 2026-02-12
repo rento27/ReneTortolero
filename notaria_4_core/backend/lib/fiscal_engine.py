@@ -1,6 +1,9 @@
 import re
 import unicodedata
+import json
+import os
 from decimal import Decimal, getcontext, ROUND_HALF_UP
+from pathlib import Path
 
 # Set strict decimal precision
 getcontext().prec = 50
@@ -14,20 +17,31 @@ REGIME_REGEX = re.compile(
 )
 
 # Constants
+IVA_RATE = Decimal("0.16")
 ISR_RETENTION_RATE = Decimal("0.10")
 # Two-thirds of IVA (16% * 2/3 = 10.6666...) approximated to 10.6667% for direct base calculation
 # Or calculated as (Subtotal * 0.16) * (2/3)
 # The prompt says "Matemáticamente, esto equivale a una tasa del 10.6667%".
 IVA_RETENTION_RATE_DIRECT = Decimal("0.106667")
 
-# Stub for Postal Code Catalog (Manzanillo samples)
-# In production, this would be loaded from Firestore/Cache
-VALID_POSTAL_CODES = {
-    "28200": "COL",
-    "28218": "COL",
-    "28230": "COL",
-    "06600": "CMX" # Mexico City sample
-}
+# Load Postal Code Catalog
+# Located in ../data/c_CodigoPostal_Manzanillo.json relative to this file
+BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_FILE = BASE_DIR / "data" / "c_CodigoPostal_Manzanillo.json"
+
+VALID_POSTAL_CODES = {}
+try:
+    with open(DATA_FILE, "r", encoding="utf-8") as f:
+        VALID_POSTAL_CODES = json.load(f)
+except FileNotFoundError:
+    # Fallback or log error
+    # For now, we will use a minimal fallback if file is missing (e.g. testing env without file copy)
+    VALID_POSTAL_CODES = {
+        "28200": "COL",
+        "28218": "COL",
+        "28230": "COL",
+        "06600": "CMX"
+    }
 
 def validate_postal_code(cp: str, expected_state: str = None) -> bool:
     """
