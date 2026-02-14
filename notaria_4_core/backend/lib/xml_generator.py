@@ -1,5 +1,6 @@
 from decimal import Decimal
 import logging
+from typing import Dict, Any
 
 # Check for satcfdi availability
 try:
@@ -13,7 +14,7 @@ from .fiscal_engine import validate_copropiedad, calculate_retentions
 
 logger = logging.getLogger(__name__)
 
-def generate_signed_xml(invoice_data: dict) -> bytes:
+def generate_signed_xml(invoice_data: Dict[str, Any]) -> bytes:
     """
     Generates a CFDI 4.0 XML object.
 
@@ -22,6 +23,7 @@ def generate_signed_xml(invoice_data: dict) -> bytes:
     """
 
     # 1. Pre-generation Validation
+    # Legacy coproperty check if not using Complemento
     if 'copropietarios' in invoice_data and invoice_data['copropietarios']:
         percentages = [Decimal(str(p['porcentaje'])) for p in invoice_data['copropietarios']]
         validate_copropiedad(percentages)
@@ -31,7 +33,6 @@ def generate_signed_xml(invoice_data: dict) -> bytes:
         return b"<error>satcfdi not available</error>"
 
     # 2. Build Taxes (Impuestos)
-    # We re-calculate to ensure consistency with the fiscal engine
     impuestos = None
     retentions = calculate_retentions(invoice_data['receptor']['rfc'], Decimal(str(invoice_data['subtotal'])))
 
@@ -43,11 +44,22 @@ def generate_signed_xml(invoice_data: dict) -> bytes:
                 {'Impuesto': '002', 'Importe': retentions['iva']}  # IVA
             ]
         }
-        # Note: satcfdi automatically calculates totals if structure is correct,
-        # but passing explicit dictionaries is supported.
 
-    # 3. Construct Comprobante
-    # Using hardcoded Emisor for Notaria 4 as per prompt context
+    # 3. Prepare Complemento Notarios
+    complemento_node = None
+    if invoice_data.get('complemento_notarios'):
+        try:
+            from .complement_notarios import create_complemento_notarios
+            from .api_models import ComplementoNotariosModel
+
+            # Reconstruct model from dict for validation and helper access
+            comp_model = ComplementoNotariosModel(**invoice_data['complemento_notarios'])
+            complemento_node = create_complemento_notarios(comp_model)
+        except Exception as e:
+            logger.error(f"Error creating Complemento Notarios: {e}")
+            raise e
+
+    # 4. Construct Comprobante
     try:
         cfdi = cfdi40.Comprobante(
             Emisor={
@@ -60,8 +72,7 @@ def generate_signed_xml(invoice_data: dict) -> bytes:
                 'Nombre': invoice_data['receptor']['nombre'],
                 'UsoCFDI': invoice_data['receptor']['uso_cfdi'],
                 'DomicilioFiscalReceptor': invoice_data['receptor']['domicilio_fiscal'],
-                'RegimenFiscalReceptor': '601' # Default to General de Ley PM or logic needed
-                # Note: The prompt implies strictly validating this from data
+                'RegimenFiscalReceptor': invoice_data['receptor'].get('regimen_fiscal', '601')
             },
             Conceptos=[
                 {
@@ -80,19 +91,12 @@ def generate_signed_xml(invoice_data: dict) -> bytes:
             TipoDeComprobante='I',
             LugarExpedicion='28200',
             Impuestos=impuestos,
-            Exportacion='01' # No aplica
+            Exportacion='01',
+            Complemento=complemento_node
         )
 
-        # 4. Complemento Notarios (Stub logic)
-        # if 'complemento_notarios' in invoice_data:
-        #     cfdi['Complemento'] = ...
-
-        # 5. Signing
-        # In a real environment:
-        # signer = Signer.load(certificate=..., key=..., password=...)
-        # cfdi.sign(signer)
-
-        # Return the XML structure (Unsigned for now as we lack keys)
+        # 5. Signing (Mocked)
+        # return cfdi.xml_bytes() -> Unsigned
         return cfdi.xml_bytes()
 
     except Exception as e:
