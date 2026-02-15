@@ -1,39 +1,10 @@
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from typing import List, Optional, Any
 from decimal import Decimal
 from lib.fiscal_engine import sanitize_name, calculate_isai_manzanillo, calculate_retentions, validate_postal_code
 from lib.xml_generator import generate_signed_xml
+from lib.api_models import InvoiceRequest
 
 app = FastAPI(title="Notaria 4 Digital Core API", version="1.0.0")
-
-class Receptor(BaseModel):
-    rfc: str
-    nombre: str
-    uso_cfdi: str
-    domicilio_fiscal: str
-
-class Concepto(BaseModel):
-    clave_prod_serv: str
-    cantidad: Decimal
-    clave_unidad: str
-    descripcion: str
-    valor_unitario: Decimal
-    importe: Decimal
-    objeto_imp: str
-
-class Copropietario(BaseModel):
-    nombre: str
-    rfc: str
-    porcentaje: Decimal
-
-class InvoiceRequest(BaseModel):
-    receptor: Receptor
-    conceptos: List[Concepto]
-    subtotal: Decimal
-    total: Decimal
-    copropietarios: Optional[List[Copropietario]] = None
-    datos_extra: Optional[dict] = None
 
 @app.get("/health")
 def health_check():
@@ -41,37 +12,43 @@ def health_check():
 
 @app.post("/api/v1/cfdi")
 def create_cfdi(request: InvoiceRequest):
-    # Pydantic v2 compatibility
-    data = request.model_dump()
-
     # 1. Sanitize Receptor Name
-    data['receptor']['nombre'] = sanitize_name(data['receptor']['nombre'])
+    # We update the model directly
+    sanitized_name = sanitize_name(request.receptor.nombre)
+    request.receptor.nombre = sanitized_name
 
     # 1.1 Validate Postal Code
-    # Assuming the API receives the 'domicilio_fiscal' as the CP code
-    if not validate_postal_code(data['receptor']['domicilio_fiscal']):
-         raise HTTPException(status_code=400, detail=f"Invalid Postal Code: {data['receptor']['domicilio_fiscal']}")
+    if not validate_postal_code(request.receptor.domicilio_fiscal):
+         raise HTTPException(status_code=400, detail=f"Invalid Postal Code: {request.receptor.domicilio_fiscal}")
 
-    # 2. Calculate Retentions (Logic Check)
+    # 2. Calculate Retentions (for response visibility only)
+    # This logic is duplicated here for response purposes,
+    # but the authoritative logic for XML is in xml_generator.
     retentions = calculate_retentions(
-        data['receptor']['rfc'],
-        data['subtotal']
+        request.receptor.rfc,
+        request.subtotal
     )
 
     # 3. Generate XML
     try:
-        xml_bytes = generate_signed_xml(data)
-        # In a real scenario, we might upload this to storage and return a URL
-        # For now, return the stub content
+        # Pass the Pydantic model
+        xml_bytes = generate_signed_xml(request)
+
         return {
             "status": "success",
-            "xml_base64": xml_bytes.decode('utf-8'), # Stub returns simple string bytes
+            "xml_base64": xml_bytes.decode('utf-8', errors='replace'), # Ensure string output
             "retentions_calculated": retentions
         }
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=f"Validation Error: {str(ve)}")
     except Exception as e:
+        # In production, log e
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/calculate-isai")
+def calculate_isai(operation_price: Decimal, cadastral_value: Decimal):
+    isai = calculate_isai_manzanillo(operation_price, cadastral_value)
+    return {"isai": isai}
 
 @app.get("/")
 def root():
