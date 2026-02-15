@@ -1,5 +1,6 @@
 from decimal import Decimal
 import logging
+from typing import Optional, Dict, Any
 
 # Check for satcfdi availability
 try:
@@ -9,90 +10,119 @@ except ImportError:
     cfdi40 = None
     Signer = None
 
-from .fiscal_engine import validate_copropiedad, calculate_retentions
+from .fiscal_engine import sanitize_name
+from .api_models import InvoiceRequest, Concepto
+from .complement_notarios import create_complemento_notarios
 
 logger = logging.getLogger(__name__)
 
-def generate_signed_xml(invoice_data: dict) -> bytes:
+def generate_signed_xml(invoice_data: Any) -> bytes:
     """
     Generates a CFDI 4.0 XML object.
-
-    Current implementation builds the Comprobante structure using satcfdi.
-    Note: Signing is mocked as we do not have valid CSD certificates in this environment.
+    Accepts a dictionary (from InvoiceRequest.model_dump()) or InvoiceRequest object.
     """
 
-    # 1. Pre-generation Validation
-    if 'copropietarios' in invoice_data and invoice_data['copropietarios']:
-        percentages = [Decimal(str(p['porcentaje'])) for p in invoice_data['copropietarios']]
-        validate_copropiedad(percentages)
+    # Normalize input
+    if not isinstance(invoice_data, InvoiceRequest):
+        if isinstance(invoice_data, dict):
+            request_model = InvoiceRequest(**invoice_data)
+        else:
+            raise ValueError("Invalid input type for generate_signed_xml")
+    else:
+        request_model = invoice_data
 
     if not cfdi40:
         logger.error("satcfdi library not found")
         return b"<error>satcfdi not available</error>"
 
-    # 2. Build Taxes (Impuestos)
-    # We re-calculate to ensure consistency with the fiscal engine
-    impuestos = None
-    retentions = calculate_retentions(invoice_data['receptor']['rfc'], Decimal(str(invoice_data['subtotal'])))
+    # 1. Determine Receptor Type and Retentions Logic
+    rfc_receptor = request_model.receptor.rfc
+    is_moral = len(rfc_receptor.strip()) == 12
 
-    if retentions['is_moral']:
-        # Construct Impuestos node
-        impuestos = {
-            'Retenciones': [
-                {'Impuesto': '001', 'Importe': retentions['isr']}, # ISR
-                {'Impuesto': '002', 'Importe': retentions['iva']}  # IVA
-            ]
+    # 2. Build Conceptos with Tax Logic
+    conceptos_cfdi = []
+
+    for c in request_model.conceptos:
+        # Prepare arguments for satcfdi.Concepto (using snake_case arguments)
+        concepto_args = {
+            'clave_prod_serv': c.clave_prod_serv,
+            'cantidad': c.cantidad,
+            'clave_unidad': c.clave_unidad,
+            'descripcion': c.descripcion,
+            'valor_unitario': c.valor_unitario,
+            'objeto_imp': c.objeto_imp
         }
-        # Note: satcfdi automatically calculates totals if structure is correct,
-        # but passing explicit dictionaries is supported.
 
-    # 3. Construct Comprobante
-    # Using hardcoded Emisor for Notaria 4 as per prompt context
+        impuestos_dict = {}
+
+        # Apply Retentions if Persona Moral AND ObjetoImp is '02' (Yes object of tax)
+        if is_moral and c.objeto_imp == '02':
+            # Calculate taxes for this concept
+            # ISR: 10%
+            isr_amount = (c.importe * Decimal("0.10")).quantize(Decimal("0.01"))
+            # IVA Ret: 10.6667% (0.106667)
+            iva_ret_amount = (c.importe * Decimal("0.106667")).quantize(Decimal("0.01"))
+            # IVA Traslado: 16%
+            iva_traslado_amount = (c.importe * Decimal("0.16")).quantize(Decimal("0.01"))
+
+            impuestos_dict = {
+                'Traslados': [
+                    {'Base': c.importe, 'Impuesto': '002', 'TipoFactor': 'Tasa', 'TasaOCuota': Decimal('0.160000'), 'Importe': iva_traslado_amount}
+                ],
+                'Retenciones': [
+                    {'Base': c.importe, 'Impuesto': '001', 'TipoFactor': 'Tasa', 'TasaOCuota': Decimal('0.100000'), 'Importe': isr_amount}, # ISR
+                    {'Base': c.importe, 'Impuesto': '002', 'TipoFactor': 'Tasa', 'TasaOCuota': Decimal('0.106667'), 'Importe': iva_ret_amount}  # IVA
+                ]
+            }
+        elif c.objeto_imp == '02':
+            # Persona Fisica: Only Traslado (IVA 16%)
+            iva_traslado_amount = (c.importe * Decimal("0.16")).quantize(Decimal("0.01"))
+            impuestos_dict = {
+                 'Traslados': [
+                    {'Base': c.importe, 'Impuesto': '002', 'TipoFactor': 'Tasa', 'TasaOCuota': Decimal('0.160000'), 'Importe': iva_traslado_amount}
+                ]
+            }
+
+        if impuestos_dict:
+            concepto_args['impuestos'] = impuestos_dict
+
+        conceptos_cfdi.append(cfdi40.Concepto(**concepto_args))
+
+    # 3. Construct Complemento Notarios
+    complemento = None
+    if request_model.complemento_notarios:
+        complemento = create_complemento_notarios(request_model.complemento_notarios)
+
+    # 4. Construct Comprobante
+    # SubTotal, Total, Impuestos (Root) are auto-calculated by satcfdi from Conceptos
+
     try:
         cfdi = cfdi40.Comprobante(
-            Emisor={
+            emisor={
                 'Rfc': 'TOSR520601AZ4',
                 'RegimenFiscal': '612',
                 'Nombre': 'RENE MANUEL TORTOLERO SANTILLANA'
             },
-            Receptor={
-                'Rfc': invoice_data['receptor']['rfc'],
-                'Nombre': invoice_data['receptor']['nombre'],
-                'UsoCFDI': invoice_data['receptor']['uso_cfdi'],
-                'DomicilioFiscalReceptor': invoice_data['receptor']['domicilio_fiscal'],
-                'RegimenFiscalReceptor': '601' # Default to General de Ley PM or logic needed
-                # Note: The prompt implies strictly validating this from data
+            receptor={
+                'Rfc': rfc_receptor,
+                'Nombre': sanitize_name(request_model.receptor.nombre),
+                'UsoCFDI': request_model.receptor.uso_cfdi,
+                'DomicilioFiscalReceptor': request_model.receptor.domicilio_fiscal,
+                'RegimenFiscalReceptor': request_model.receptor.regimen_fiscal
             },
-            Conceptos=[
-                {
-                    'ClaveProdServ': c['clave_prod_serv'],
-                    'Cantidad': Decimal(str(c['cantidad'])),
-                    'ClaveUnidad': c['clave_unidad'],
-                    'Descripcion': c['descripcion'],
-                    'ValorUnitario': Decimal(str(c['valor_unitario'])),
-                    'Importe': Decimal(str(c['importe'])),
-                    'ObjetoImp': c['objeto_imp']
-                } for c in invoice_data['conceptos']
-            ],
-            SubTotal=Decimal(str(invoice_data['subtotal'])),
-            Moneda='MXN',
-            Total=Decimal(str(invoice_data['total'])),
-            TipoDeComprobante='I',
-            LugarExpedicion='28200',
-            Impuestos=impuestos,
-            Exportacion='01' # No aplica
+            conceptos=conceptos_cfdi,
+            moneda='MXN',
+            tipo_de_comprobante='I',
+            lugar_expedicion='28200',
+            exportacion='01', # No aplica
+            complemento=complemento
         )
 
-        # 4. Complemento Notarios (Stub logic)
-        # if 'complemento_notarios' in invoice_data:
-        #     cfdi['Complemento'] = ...
-
-        # 5. Signing
+        # 5. Signing (Stub)
         # In a real environment:
         # signer = Signer.load(certificate=..., key=..., password=...)
         # cfdi.sign(signer)
 
-        # Return the XML structure (Unsigned for now as we lack keys)
         return cfdi.xml_bytes()
 
     except Exception as e:
