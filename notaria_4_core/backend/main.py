@@ -1,39 +1,10 @@
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from typing import List, Optional, Any
 from decimal import Decimal
+from lib.api_models import InvoiceRequest, ISAIRequest
 from lib.fiscal_engine import sanitize_name, calculate_isai_manzanillo, calculate_retentions, validate_postal_code
 from lib.xml_generator import generate_signed_xml
 
 app = FastAPI(title="Notaria 4 Digital Core API", version="1.0.0")
-
-class Receptor(BaseModel):
-    rfc: str
-    nombre: str
-    uso_cfdi: str
-    domicilio_fiscal: str
-
-class Concepto(BaseModel):
-    clave_prod_serv: str
-    cantidad: Decimal
-    clave_unidad: str
-    descripcion: str
-    valor_unitario: Decimal
-    importe: Decimal
-    objeto_imp: str
-
-class Copropietario(BaseModel):
-    nombre: str
-    rfc: str
-    porcentaje: Decimal
-
-class InvoiceRequest(BaseModel):
-    receptor: Receptor
-    conceptos: List[Concepto]
-    subtotal: Decimal
-    total: Decimal
-    copropietarios: Optional[List[Copropietario]] = None
-    datos_extra: Optional[dict] = None
 
 @app.get("/health")
 def health_check():
@@ -70,6 +41,22 @@ def create_cfdi(request: InvoiceRequest):
         }
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=f"Validation Error: {str(ve)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/calculate-isai")
+def calculate_isai(request: ISAIRequest):
+    try:
+        isai = calculate_isai_manzanillo(
+            operation_price=request.precio_operacion,
+            cadastral_value=request.valor_catastral,
+            rate=request.tasa
+        )
+        return {
+            "isai_manzanillo": isai,
+            "base_gravable": max(request.precio_operacion, request.valor_catastral),
+            "tasa_aplicada": request.tasa
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

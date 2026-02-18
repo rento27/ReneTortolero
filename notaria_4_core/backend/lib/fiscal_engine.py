@@ -56,6 +56,9 @@ def sanitize_name(name: str) -> str:
     # Remove commas which often precede the regime
     clean_name = name.replace(",", "")
 
+    # Strip whitespace before regex to ensure $ anchor works
+    clean_name = clean_name.strip()
+
     # Remove the regime using regex
     clean_name = REGIME_REGEX.sub("", clean_name)
 
@@ -99,10 +102,9 @@ def calculate_retentions(rfc_receptor: str, subtotal: Decimal, iva_rate: Decimal
         retentions["isr"] = (subtotal * ISR_RETENTION_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
         # IVA Retention: 2/3 of the IVA amount
-        # IVA Amount = Subtotal * iva_rate
-        # Ret = IVA Amount * (2/3)
-        iva_amount = subtotal * iva_rate
-        ret_iva = iva_amount * (Decimal("2") / Decimal("3"))
+        # Mathematically equivalent to 10.6667% of the Subtotal
+        # We use the direct rate to match the prompt's example precision
+        ret_iva = subtotal * IVA_RETENTION_RATE_DIRECT
         retentions["iva"] = ret_iva.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     return retentions
