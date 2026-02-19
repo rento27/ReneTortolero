@@ -1,24 +1,23 @@
 from decimal import Decimal
 import logging
+from .fiscal_engine import validate_copropiedad, calculate_retentions, IVA_RETENTION_RATE_DIRECT
+from .security import load_signer_from_secret_manager
 
 # Check for satcfdi availability
 try:
     from satcfdi.create.cfd import cfdi40
-    from satcfdi.models import Signer
 except ImportError:
     cfdi40 = None
-    Signer = None
-
-from .fiscal_engine import validate_copropiedad, calculate_retentions
 
 logger = logging.getLogger(__name__)
 
-def generate_signed_xml(invoice_data: dict) -> bytes:
+def generate_signed_xml(invoice_data: dict, complemento=None) -> bytes:
     """
     Generates a CFDI 4.0 XML object.
 
-    Current implementation builds the Comprobante structure using satcfdi.
-    Note: Signing is mocked as we do not have valid CSD certificates in this environment.
+    Args:
+        invoice_data: Dictionary with invoice data (from InvoiceRequest.model_dump())
+        complemento: Optional satcfdi complement object (e.g. NotariosPublicos)
     """
 
     # 1. Pre-generation Validation
@@ -30,69 +29,85 @@ def generate_signed_xml(invoice_data: dict) -> bytes:
         logger.error("satcfdi library not found")
         return b"<error>satcfdi not available</error>"
 
-    # 2. Build Taxes (Impuestos)
-    # We re-calculate to ensure consistency with the fiscal engine
-    impuestos = None
-    retentions = calculate_retentions(invoice_data['receptor']['rfc'], Decimal(str(invoice_data['subtotal'])))
+    # 2. Build Concepts and Taxes
+    is_moral = len(invoice_data['receptor']['rfc']) == 12
+    concepts = []
 
-    if retentions['is_moral']:
-        # Construct Impuestos node
-        impuestos = {
-            'Retenciones': [
-                {'Impuesto': '001', 'Importe': retentions['isr']}, # ISR
-                {'Impuesto': '002', 'Importe': retentions['iva']}  # IVA
-            ]
+    for c in invoice_data['conceptos']:
+        c_args = {
+            'clave_prod_serv': c['clave_prod_serv'],
+            'cantidad': Decimal(str(c['cantidad'])),
+            'clave_unidad': c['clave_unidad'],
+            'descripcion': c['descripcion'],
+            'valor_unitario': Decimal(str(c['valor_unitario'])),
+            'objeto_imp': c['objeto_imp']
         }
-        # Note: satcfdi automatically calculates totals if structure is correct,
-        # but passing explicit dictionaries is supported.
+
+        # Add Taxes if ObjetoImp is 02
+        if c['objeto_imp'] == '02':
+            traslados = []
+            retenciones = []
+
+            # IVA 16%
+            traslados.append({
+                'Impuesto': '002',
+                'TasaOCuota': Decimal('0.160000'),
+                'TipoFactor': 'Tasa'
+            })
+
+            if is_moral:
+                # ISR 10%
+                retenciones.append({
+                    'Impuesto': '001',
+                    'TasaOCuota': Decimal('0.100000'),
+                    'TipoFactor': 'Tasa'
+                })
+                # IVA Retention
+                retenciones.append({
+                    'Impuesto': '002',
+                    'TasaOCuota': IVA_RETENTION_RATE_DIRECT,
+                    'TipoFactor': 'Tasa'
+                })
+
+            c_args['impuestos'] = {
+                'Traslados': traslados,
+                'Retenciones': retenciones
+            }
+
+        concepts.append(cfdi40.Concepto(**c_args))
 
     # 3. Construct Comprobante
-    # Using hardcoded Emisor for Notaria 4 as per prompt context
     try:
         cfdi = cfdi40.Comprobante(
-            Emisor={
+            emisor={
                 'Rfc': 'TOSR520601AZ4',
                 'RegimenFiscal': '612',
                 'Nombre': 'RENE MANUEL TORTOLERO SANTILLANA'
             },
-            Receptor={
+            receptor={
                 'Rfc': invoice_data['receptor']['rfc'],
                 'Nombre': invoice_data['receptor']['nombre'],
                 'UsoCFDI': invoice_data['receptor']['uso_cfdi'],
                 'DomicilioFiscalReceptor': invoice_data['receptor']['domicilio_fiscal'],
-                'RegimenFiscalReceptor': '601' # Default to General de Ley PM or logic needed
-                # Note: The prompt implies strictly validating this from data
+                'RegimenFiscalReceptor': invoice_data['receptor'].get('regimen_fiscal', '601')
             },
-            Conceptos=[
-                {
-                    'ClaveProdServ': c['clave_prod_serv'],
-                    'Cantidad': Decimal(str(c['cantidad'])),
-                    'ClaveUnidad': c['clave_unidad'],
-                    'Descripcion': c['descripcion'],
-                    'ValorUnitario': Decimal(str(c['valor_unitario'])),
-                    'Importe': Decimal(str(c['importe'])),
-                    'ObjetoImp': c['objeto_imp']
-                } for c in invoice_data['conceptos']
-            ],
-            SubTotal=Decimal(str(invoice_data['subtotal'])),
-            Moneda='MXN',
-            Total=Decimal(str(invoice_data['total'])),
-            TipoDeComprobante='I',
-            LugarExpedicion='28200',
-            Impuestos=impuestos,
-            Exportacion='01' # No aplica
+            conceptos=concepts,
+            moneda='MXN',
+            lugar_expedicion='28200',
+            tipo_de_comprobante='I',
+            exportacion='01',
+            complemento=complemento
         )
 
-        # 4. Complemento Notarios (Stub logic)
-        # if 'complemento_notarios' in invoice_data:
-        #     cfdi['Complemento'] = ...
-
         # 5. Signing
-        # In a real environment:
-        # signer = Signer.load(certificate=..., key=..., password=...)
-        # cfdi.sign(signer)
+        signer = load_signer_from_secret_manager()
 
-        # Return the XML structure (Unsigned for now as we lack keys)
+        if signer:
+             cfdi.sign(signer)
+        else:
+             logger.warning("No signer available (MOCK_SIGNER=True or no creds), returning XML unsigned.")
+             # If unsigned, the XML structure is valid but lacks Sello.
+
         return cfdi.xml_bytes()
 
     except Exception as e:
