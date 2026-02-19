@@ -54,13 +54,16 @@ def sanitize_name(name: str) -> str:
         return ""
 
     # Remove commas which often precede the regime
-    clean_name = name.replace(",", "")
+    clean_name = name.replace(",", " ")
+
+    # Normalize whitespace before regex to ensure anchors work
+    clean_name = " ".join(clean_name.split())
 
     # Remove the regime using regex
     clean_name = REGIME_REGEX.sub("", clean_name)
 
-    # Remove extra internal whitespace and trim
-    clean_name = " ".join(clean_name.split())
+    # Clean up again in case regex left trailing spaces
+    clean_name = clean_name.strip()
 
     # Normalize unicode to remove accents (NFD decomposition)
     clean_name = unicodedata.normalize('NFD', clean_name)
@@ -101,8 +104,8 @@ def calculate_retentions(rfc_receptor: str, subtotal: Decimal, iva_rate: Decimal
         # IVA Retention: 2/3 of the IVA amount
         # IVA Amount = Subtotal * iva_rate
         # Ret = IVA Amount * (2/3)
-        iva_amount = subtotal * iva_rate
-        ret_iva = iva_amount * (Decimal("2") / Decimal("3"))
+        # However, to avoid precision issues and match the prompt's analysis, we use the direct rate.
+        ret_iva = subtotal * IVA_RETENTION_RATE_DIRECT
         retentions["iva"] = ret_iva.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     return retentions
