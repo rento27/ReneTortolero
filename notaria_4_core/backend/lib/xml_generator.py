@@ -10,6 +10,8 @@ except ImportError:
     Signer = None
 
 from .fiscal_engine import validate_copropiedad, calculate_retentions
+from .api_models import ComplementoNotariosModel
+from .complement_notarios import create_complemento_notarios
 
 logger = logging.getLogger(__name__)
 
@@ -83,9 +85,16 @@ def generate_signed_xml(invoice_data: dict) -> bytes:
             Exportacion='01' # No aplica
         )
 
-        # 4. Complemento Notarios (Stub logic)
-        # if 'complemento_notarios' in invoice_data:
-        #     cfdi['Complemento'] = ...
+        # 4. Complemento Notarios
+        if 'complemento_notarios' in invoice_data and invoice_data['complemento_notarios']:
+            try:
+                # Re-instantiate model from dict to ensure validation and type safety
+                comp_model = ComplementoNotariosModel(**invoice_data['complemento_notarios'])
+                complemento = create_complemento_notarios(comp_model)
+                cfdi['Complemento'] = complemento
+            except Exception as e:
+                logger.error(f"Error creating Complemento Notarios: {e}")
+                raise ValueError(f"Error creating Complemento Notarios: {e}")
 
         # 5. Signing
         # In a real environment:
