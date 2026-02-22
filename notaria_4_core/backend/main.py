@@ -1,39 +1,10 @@
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from typing import List, Optional, Any
 from decimal import Decimal
 from lib.fiscal_engine import sanitize_name, calculate_isai_manzanillo, calculate_retentions, validate_postal_code
 from lib.xml_generator import generate_signed_xml
+from lib.api_models import InvoiceRequest
 
 app = FastAPI(title="Notaria 4 Digital Core API", version="1.0.0")
-
-class Receptor(BaseModel):
-    rfc: str
-    nombre: str
-    uso_cfdi: str
-    domicilio_fiscal: str
-
-class Concepto(BaseModel):
-    clave_prod_serv: str
-    cantidad: Decimal
-    clave_unidad: str
-    descripcion: str
-    valor_unitario: Decimal
-    importe: Decimal
-    objeto_imp: str
-
-class Copropietario(BaseModel):
-    nombre: str
-    rfc: str
-    porcentaje: Decimal
-
-class InvoiceRequest(BaseModel):
-    receptor: Receptor
-    conceptos: List[Concepto]
-    subtotal: Decimal
-    total: Decimal
-    copropietarios: Optional[List[Copropietario]] = None
-    datos_extra: Optional[dict] = None
 
 @app.get("/health")
 def health_check():
@@ -71,6 +42,8 @@ def create_cfdi(request: InvoiceRequest):
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=f"Validation Error: {str(ve)}")
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/")

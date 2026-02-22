@@ -1,13 +1,16 @@
 from decimal import Decimal
 import logging
+from .api_models import ComplementoNotariosModel
 
 # Check for satcfdi availability
 try:
     from satcfdi.create.cfd import cfdi40
     from satcfdi.models import Signer
+    from .complement_notarios import create_complemento_notarios
 except ImportError:
     cfdi40 = None
     Signer = None
+    create_complemento_notarios = None
 
 from .fiscal_engine import validate_copropiedad, calculate_retentions
 
@@ -46,7 +49,19 @@ def generate_signed_xml(invoice_data: dict) -> bytes:
         # Note: satcfdi automatically calculates totals if structure is correct,
         # but passing explicit dictionaries is supported.
 
-    # 3. Construct Comprobante
+    # 3. Construct Complement (if present)
+    complemento = None
+    if 'complemento_notarios' in invoice_data and invoice_data['complemento_notarios']:
+        try:
+             # Re-hydrate the model
+             comp_model = ComplementoNotariosModel(**invoice_data['complemento_notarios'])
+             if create_complemento_notarios:
+                complemento = create_complemento_notarios(comp_model)
+        except Exception as e:
+             logger.error(f"Error creating complement: {e}")
+             raise ValueError(f"Error creating NotariosPublicos complement: {e}")
+
+    # 4. Construct Comprobante
     # Using hardcoded Emisor for Notaria 4 as per prompt context
     try:
         cfdi = cfdi40.Comprobante(
@@ -60,7 +75,7 @@ def generate_signed_xml(invoice_data: dict) -> bytes:
                 'Nombre': invoice_data['receptor']['nombre'],
                 'UsoCFDI': invoice_data['receptor']['uso_cfdi'],
                 'DomicilioFiscalReceptor': invoice_data['receptor']['domicilio_fiscal'],
-                'RegimenFiscalReceptor': '601' # Default to General de Ley PM or logic needed
+                'RegimenFiscalReceptor': invoice_data['receptor'].get('regimen_fiscal', '601') # Default but prefer explicit
                 # Note: The prompt implies strictly validating this from data
             },
             Conceptos=[
@@ -80,12 +95,9 @@ def generate_signed_xml(invoice_data: dict) -> bytes:
             TipoDeComprobante='I',
             LugarExpedicion='28200',
             Impuestos=impuestos,
-            Exportacion='01' # No aplica
+            Exportacion='01', # No aplica
+            Complemento=complemento
         )
-
-        # 4. Complemento Notarios (Stub logic)
-        # if 'complemento_notarios' in invoice_data:
-        #     cfdi['Complemento'] = ...
 
         # 5. Signing
         # In a real environment:
