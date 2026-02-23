@@ -9,3 +9,4 @@ firebase-admin
 pytest
 httpx
 python-multipart
+pydantic>=2.0

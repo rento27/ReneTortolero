@@ -98,11 +98,10 @@ def calculate_retentions(rfc_receptor: str, subtotal: Decimal, iva_rate: Decimal
         # ISR Retention: 10% of Subtotal
         retentions["isr"] = (subtotal * ISR_RETENTION_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
-        # IVA Retention: 2/3 of the IVA amount
-        # IVA Amount = Subtotal * iva_rate
-        # Ret = IVA Amount * (2/3)
-        iva_amount = subtotal * iva_rate
-        ret_iva = iva_amount * (Decimal("2") / Decimal("3"))
+        # IVA Retention: Direct application of the 10.6667% rate on Subtotal
+        # This matches the XML analysis ($648.952428) which implies a fixed rate
+        # rather than a 2/3 fraction of the IVA amount.
+        ret_iva = subtotal * IVA_RETENTION_RATE_DIRECT
         retentions["iva"] = ret_iva.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     return retentions
