@@ -30,8 +30,25 @@ def test_calculate_retentions_moral():
 
     assert ret["is_moral"] is True
     assert ret["isr"] == Decimal("100.00") # 10%
-    # IVA Ret = 1000 * 0.16 * 2/3 = 160 * 0.6666... = 106.666... -> 106.67
+    # IVA Ret = 1000 * 0.106667 = 106.667 -> 106.67
     assert ret["iva"] == Decimal("106.67")
+
+def test_calculate_retentions_moral_precision():
+    # Test specific case where 2/3 vs 0.106667 differs
+    rfc = "ABC123456T12"
+    subtotal = Decimal("1000000.00")
+    ret = calculate_retentions(rfc, subtotal)
+
+    # 2/3 logic would give 106666.67
+    # 0.106667 logic gives 106667.00
+    assert ret["iva"] == Decimal("106667.00")
+
+def test_calculate_retentions_moral_prompt_example():
+    # Example from prompt: $6,083.91 -> IVA Ret $648.95
+    rfc = "ABC123456T12"
+    subtotal = Decimal("6083.91")
+    ret = calculate_retentions(rfc, subtotal)
+    assert ret["iva"] == Decimal("648.95")
 
 def test_calculate_retentions_fisica():
     # RFC 13 chars
