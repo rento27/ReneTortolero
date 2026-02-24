@@ -1,43 +1,49 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from typing import List, Optional, Any
-from decimal import Decimal
-from lib.fiscal_engine import sanitize_name, calculate_isai_manzanillo, calculate_retentions, validate_postal_code
+from fastapi import FastAPI, HTTPException, UploadFile, File
+from lib.api_models import InvoiceRequest, ISAIRequest
+from lib.fiscal_engine import sanitize_name, calculate_retentions, validate_postal_code, calculate_isai_manzanillo
 from lib.xml_generator import generate_signed_xml
+from lib.ocr_engine import extract_text_from_pdf, extract_structured_data
 
 app = FastAPI(title="Notaria 4 Digital Core API", version="1.0.0")
-
-class Receptor(BaseModel):
-    rfc: str
-    nombre: str
-    uso_cfdi: str
-    domicilio_fiscal: str
-
-class Concepto(BaseModel):
-    clave_prod_serv: str
-    cantidad: Decimal
-    clave_unidad: str
-    descripcion: str
-    valor_unitario: Decimal
-    importe: Decimal
-    objeto_imp: str
-
-class Copropietario(BaseModel):
-    nombre: str
-    rfc: str
-    porcentaje: Decimal
-
-class InvoiceRequest(BaseModel):
-    receptor: Receptor
-    conceptos: List[Concepto]
-    subtotal: Decimal
-    total: Decimal
-    copropietarios: Optional[List[Copropietario]] = None
-    datos_extra: Optional[dict] = None
 
 @app.get("/health")
 def health_check():
     return {"status": "ok", "service": "notaria-4-core-backend"}
+
+@app.post("/api/v1/calculate-isai")
+def calculate_isai(request: ISAIRequest):
+    try:
+        kwargs = {}
+        if request.tasa is not None:
+            kwargs['rate'] = request.tasa
+
+        result = calculate_isai_manzanillo(
+            operation_price=request.precio_operacion,
+            cadastral_value=request.valor_catastral,
+            **kwargs
+        )
+        return {
+            "status": "success",
+            "isai_amount": result,
+            "base": max(request.precio_operacion, request.valor_catastral)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/extract-data")
+async def extract_data(file: UploadFile = File(...)):
+    if file.content_type != "application/pdf":
+        raise HTTPException(status_code=400, detail="Only PDF files are supported")
+
+    contents = await file.read()
+    text = extract_text_from_pdf(contents)
+    data = extract_structured_data(text)
+
+    return {
+        "status": "success",
+        "extracted_data": data,
+        "text_preview": text[:500] + "..." if len(text) > 500 else text
+    }
 
 @app.post("/api/v1/cfdi")
 def create_cfdi(request: InvoiceRequest):
