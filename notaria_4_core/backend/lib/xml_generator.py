@@ -1,5 +1,7 @@
 from decimal import Decimal
 import logging
+from .api_models import InvoiceRequest, ComplementoNotariosModel
+from .complement_notarios import create_complemento_notarios
 
 # Check for satcfdi availability
 try:
@@ -16,19 +18,14 @@ logger = logging.getLogger(__name__)
 def generate_signed_xml(invoice_data: dict) -> bytes:
     """
     Generates a CFDI 4.0 XML object.
-
-    Current implementation builds the Comprobante structure using satcfdi.
-    Note: Signing is mocked as we do not have valid CSD certificates in this environment.
+    invoice_data is expected to be a dictionary (from InvoiceRequest.model_dump()).
     """
-
-    # 1. Pre-generation Validation
-    if 'copropietarios' in invoice_data and invoice_data['copropietarios']:
-        percentages = [Decimal(str(p['porcentaje'])) for p in invoice_data['copropietarios']]
-        validate_copropiedad(percentages)
 
     if not cfdi40:
         logger.error("satcfdi library not found")
         return b"<error>satcfdi not available</error>"
+
+    # 1. Pre-generation Validation & Model Reconstruction
 
     # 2. Build Taxes (Impuestos)
     # We re-calculate to ensure consistency with the fiscal engine
@@ -43,8 +40,6 @@ def generate_signed_xml(invoice_data: dict) -> bytes:
                 {'Impuesto': '002', 'Importe': retentions['iva']}  # IVA
             ]
         }
-        # Note: satcfdi automatically calculates totals if structure is correct,
-        # but passing explicit dictionaries is supported.
 
     # 3. Construct Comprobante
     # Using hardcoded Emisor for Notaria 4 as per prompt context
@@ -60,8 +55,7 @@ def generate_signed_xml(invoice_data: dict) -> bytes:
                 'Nombre': invoice_data['receptor']['nombre'],
                 'UsoCFDI': invoice_data['receptor']['uso_cfdi'],
                 'DomicilioFiscalReceptor': invoice_data['receptor']['domicilio_fiscal'],
-                'RegimenFiscalReceptor': '601' # Default to General de Ley PM or logic needed
-                # Note: The prompt implies strictly validating this from data
+                'RegimenFiscalReceptor': invoice_data['receptor'].get('regimen_fiscal', '616') # Default to Sin Obligaciones if missing
             },
             Conceptos=[
                 {
@@ -83,11 +77,18 @@ def generate_signed_xml(invoice_data: dict) -> bytes:
             Exportacion='01' # No aplica
         )
 
-        # 4. Complemento Notarios (Stub logic)
-        # if 'complemento_notarios' in invoice_data:
-        #     cfdi['Complemento'] = ...
+        # 4. Complemento Notarios
+        if 'complemento_notarios' in invoice_data and invoice_data['complemento_notarios']:
+            # Reconstruct model for validation and helper usage
+            # Ensure the dict is compatible with the model (dates as strings might need parsing if pydantic didn't do it before dump,
+            # but model_dump usually keeps python types if not mode='json'.
+            # If main.py calls model_dump(), it returns python objects (dates are dates).
+            comp_model = ComplementoNotariosModel(**invoice_data['complemento_notarios'])
+            complemento = create_complemento_notarios(comp_model)
+            if complemento:
+                cfdi['Complemento'] = complemento
 
-        # 5. Signing
+        # 5. Signing (Mocked)
         # In a real environment:
         # signer = Signer.load(certificate=..., key=..., password=...)
         # cfdi.sign(signer)
