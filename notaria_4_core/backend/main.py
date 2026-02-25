@@ -1,39 +1,9 @@
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from typing import List, Optional, Any
-from decimal import Decimal
-from lib.fiscal_engine import sanitize_name, calculate_isai_manzanillo, calculate_retentions, validate_postal_code
+from lib.api_models import InvoiceRequest
+from lib.fiscal_engine import sanitize_name, calculate_retentions, validate_postal_code
 from lib.xml_generator import generate_signed_xml
 
 app = FastAPI(title="Notaria 4 Digital Core API", version="1.0.0")
-
-class Receptor(BaseModel):
-    rfc: str
-    nombre: str
-    uso_cfdi: str
-    domicilio_fiscal: str
-
-class Concepto(BaseModel):
-    clave_prod_serv: str
-    cantidad: Decimal
-    clave_unidad: str
-    descripcion: str
-    valor_unitario: Decimal
-    importe: Decimal
-    objeto_imp: str
-
-class Copropietario(BaseModel):
-    nombre: str
-    rfc: str
-    porcentaje: Decimal
-
-class InvoiceRequest(BaseModel):
-    receptor: Receptor
-    conceptos: List[Concepto]
-    subtotal: Decimal
-    total: Decimal
-    copropietarios: Optional[List[Copropietario]] = None
-    datos_extra: Optional[dict] = None
 
 @app.get("/health")
 def health_check():
@@ -42,6 +12,7 @@ def health_check():
 @app.post("/api/v1/cfdi")
 def create_cfdi(request: InvoiceRequest):
     # Pydantic v2 compatibility
+    # dumps to python types (dates, decimals)
     data = request.model_dump()
 
     # 1. Sanitize Receptor Name
@@ -62,10 +33,14 @@ def create_cfdi(request: InvoiceRequest):
     try:
         xml_bytes = generate_signed_xml(data)
         # In a real scenario, we might upload this to storage and return a URL
-        # For now, return the stub content
+        # For now, return the stub content. xml_bytes is bytes.
+
+        # Handle the case where xml_generator returns an error string in bytes
+        response_content = xml_bytes.decode('utf-8') if isinstance(xml_bytes, bytes) else str(xml_bytes)
+
         return {
             "status": "success",
-            "xml_base64": xml_bytes.decode('utf-8'), # Stub returns simple string bytes
+            "xml_base64": response_content,
             "retentions_calculated": retentions
         }
     except ValueError as ve:
