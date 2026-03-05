@@ -61,3 +61,8 @@ def test_validate_postal_code():
 
     # Unknown CP
     assert validate_postal_code("99999") is False
+
+def test_sanitize_name_with_trailing_space():
+    input_name = "INMOBILIARIA DEL PACÍFICO, S.A. DE C.V. "
+    expected = "INMOBILIARIA DEL PACIFICO"
+    assert sanitize_name(input_name) == expected

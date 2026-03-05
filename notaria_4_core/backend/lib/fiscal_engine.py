@@ -54,7 +54,7 @@ def sanitize_name(name: str) -> str:
         return ""
 
     # Remove commas which often precede the regime
-    clean_name = name.replace(",", "")
+    clean_name = name.strip().replace(",", "")
 
     # Remove the regime using regex
     clean_name = REGIME_REGEX.sub("", clean_name)
