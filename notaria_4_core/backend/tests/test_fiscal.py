@@ -13,6 +13,9 @@ def test_sanitize_name():
     assert sanitize_name("  Espacios  Extra  ") == "ESPACIOS EXTRA"
     assert sanitize_name("Árbol") == "ARBOL"
 
+    # Test trailing whitespace logic
+    assert sanitize_name("INMOBILIARIA DEL PACÍFICO, S.A. DE C.V.   ") == "INMOBILIARIA DEL PACIFICO"
+
 def test_validate_copropiedad_success():
     percentages = [Decimal("50.00"), Decimal("50.00")]
     assert validate_copropiedad(percentages) is True
