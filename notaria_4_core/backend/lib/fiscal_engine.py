@@ -14,6 +14,7 @@ REGIME_REGEX = re.compile(
 )
 
 # Constants
+IVA_RATE = Decimal("0.16")
 ISR_RETENTION_RATE = Decimal("0.10")
 # Two-thirds of IVA (16% * 2/3 = 10.6666...) approximated to 10.6667% for direct base calculation
 # Or calculated as (Subtotal * 0.16) * (2/3)
@@ -55,6 +56,9 @@ def sanitize_name(name: str) -> str:
 
     # Remove commas which often precede the regime
     clean_name = name.replace(",", "")
+
+    # Strip leading/trailing whitespaces before REGEX match
+    clean_name = clean_name.strip()
 
     # Remove the regime using regex
     clean_name = REGIME_REGEX.sub("", clean_name)
