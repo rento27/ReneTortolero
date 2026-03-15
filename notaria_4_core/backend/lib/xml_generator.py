@@ -10,6 +10,7 @@ except ImportError:
     Signer = None
 
 from .fiscal_engine import validate_copropiedad, calculate_retentions
+from .api_models import ComplementoNotariosModel
 
 logger = logging.getLogger(__name__)
 
@@ -49,21 +50,20 @@ def generate_signed_xml(invoice_data: dict) -> bytes:
     # 3. Construct Comprobante
     # Using hardcoded Emisor for Notaria 4 as per prompt context
     try:
-        cfdi = cfdi40.Comprobante(
-            Emisor={
+        kwargs = {
+            'emisor': {
                 'Rfc': 'TOSR520601AZ4',
                 'RegimenFiscal': '612',
                 'Nombre': 'RENE MANUEL TORTOLERO SANTILLANA'
             },
-            Receptor={
+            'receptor': {
                 'Rfc': invoice_data['receptor']['rfc'],
                 'Nombre': invoice_data['receptor']['nombre'],
                 'UsoCFDI': invoice_data['receptor']['uso_cfdi'],
                 'DomicilioFiscalReceptor': invoice_data['receptor']['domicilio_fiscal'],
-                'RegimenFiscalReceptor': '601' # Default to General de Ley PM or logic needed
-                # Note: The prompt implies strictly validating this from data
+                'RegimenFiscalReceptor': invoice_data['receptor'].get('regimen_fiscal', '601')
             },
-            Conceptos=[
+            'conceptos': [
                 {
                     'ClaveProdServ': c['clave_prod_serv'],
                     'Cantidad': Decimal(str(c['cantidad'])),
@@ -74,18 +74,28 @@ def generate_signed_xml(invoice_data: dict) -> bytes:
                     'ObjetoImp': c['objeto_imp']
                 } for c in invoice_data['conceptos']
             ],
-            SubTotal=Decimal(str(invoice_data['subtotal'])),
-            Moneda='MXN',
-            Total=Decimal(str(invoice_data['total'])),
-            TipoDeComprobante='I',
-            LugarExpedicion='28200',
-            Impuestos=impuestos,
-            Exportacion='01' # No aplica
-        )
+            'moneda': 'MXN',
+            'tipo_de_comprobante': 'I',
+            'lugar_expedicion': '28200',
+            'exportacion': '01' # No aplica
+        }
 
-        # 4. Complemento Notarios (Stub logic)
-        # if 'complemento_notarios' in invoice_data:
-        #     cfdi['Complemento'] = ...
+        if impuestos:
+            kwargs['impuestos'] = impuestos
+
+        # 4. Complemento Notarios
+        if 'complemento_notarios' in invoice_data and invoice_data['complemento_notarios']:
+            # Import here to avoid circular dependencies and isolate satcfdi
+            from .complement_notarios import create_complemento_notarios
+
+            # Ensure Pydantic validation by re-instantiating if it's a dict
+            comp_data = invoice_data['complemento_notarios']
+            comp_model = ComplementoNotariosModel(**comp_data)
+
+            complemento = create_complemento_notarios(comp_model.model_dump())
+            kwargs['complemento'] = complemento
+
+        cfdi = cfdi40.Comprobante(**kwargs)
 
         # 5. Signing
         # In a real environment:
