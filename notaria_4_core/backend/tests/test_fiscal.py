@@ -30,7 +30,7 @@ def test_calculate_retentions_moral():
 
     assert ret["is_moral"] is True
     assert ret["isr"] == Decimal("100.00") # 10%
-    # IVA Ret = 1000 * 0.16 * 2/3 = 160 * 0.6666... = 106.666... -> 106.67
+    # IVA Ret = 1000 * 0.106667 (using IVA_RETENTION_RATE_DIRECT)
     assert ret["iva"] == Decimal("106.67")
 
 def test_calculate_retentions_fisica():
