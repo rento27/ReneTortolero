@@ -1,39 +1,12 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from typing import List, Optional, Any
 from decimal import Decimal
 from lib.fiscal_engine import sanitize_name, calculate_isai_manzanillo, calculate_retentions, validate_postal_code
 from lib.xml_generator import generate_signed_xml
+from lib.api_models import InvoiceRequest, ISAIRequest
+from lib.ocr_engine import extract_text_from_pdf, analyze_text
 
 app = FastAPI(title="Notaria 4 Digital Core API", version="1.0.0")
-
-class Receptor(BaseModel):
-    rfc: str
-    nombre: str
-    uso_cfdi: str
-    domicilio_fiscal: str
-
-class Concepto(BaseModel):
-    clave_prod_serv: str
-    cantidad: Decimal
-    clave_unidad: str
-    descripcion: str
-    valor_unitario: Decimal
-    importe: Decimal
-    objeto_imp: str
-
-class Copropietario(BaseModel):
-    nombre: str
-    rfc: str
-    porcentaje: Decimal
-
-class InvoiceRequest(BaseModel):
-    receptor: Receptor
-    conceptos: List[Concepto]
-    subtotal: Decimal
-    total: Decimal
-    copropietarios: Optional[List[Copropietario]] = None
-    datos_extra: Optional[dict] = None
 
 @app.get("/health")
 def health_check():
@@ -70,6 +43,29 @@ def create_cfdi(request: InvoiceRequest):
         }
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=f"Validation Error: {str(ve)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/calculate-isai")
+def calculate_isai(request: ISAIRequest):
+    isai = calculate_isai_manzanillo(request.operation_price, request.cadastral_value, request.rate)
+    return {"isai": str(isai)}
+
+@app.post("/api/v1/extract-data")
+async def extract_data(file: UploadFile = File(...)):
+    if not file.filename.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="File must be a PDF")
+
+    try:
+        content = await file.read()
+        extracted_text = extract_text_from_pdf(content)
+        analysis_result = analyze_text(extracted_text)
+
+        return {
+            "status": "success",
+            "extracted_text_preview": extracted_text[:500] + "..." if len(extracted_text) > 500 else extracted_text,
+            "analysis": analysis_result
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
