@@ -1,39 +1,11 @@
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from typing import List, Optional, Any
-from decimal import Decimal
+from lib.api_models import InvoiceRequest, ISAIRequest, ExtractDataRequest
 from lib.fiscal_engine import sanitize_name, calculate_isai_manzanillo, calculate_retentions, validate_postal_code
 from lib.xml_generator import generate_signed_xml
+from lib.ocr_engine import process_pdf_base64
+import os
 
 app = FastAPI(title="Notaria 4 Digital Core API", version="1.0.0")
-
-class Receptor(BaseModel):
-    rfc: str
-    nombre: str
-    uso_cfdi: str
-    domicilio_fiscal: str
-
-class Concepto(BaseModel):
-    clave_prod_serv: str
-    cantidad: Decimal
-    clave_unidad: str
-    descripcion: str
-    valor_unitario: Decimal
-    importe: Decimal
-    objeto_imp: str
-
-class Copropietario(BaseModel):
-    nombre: str
-    rfc: str
-    porcentaje: Decimal
-
-class InvoiceRequest(BaseModel):
-    receptor: Receptor
-    conceptos: List[Concepto]
-    subtotal: Decimal
-    total: Decimal
-    copropietarios: Optional[List[Copropietario]] = None
-    datos_extra: Optional[dict] = None
 
 @app.get("/health")
 def health_check():
@@ -72,6 +44,24 @@ def create_cfdi(request: InvoiceRequest):
         raise HTTPException(status_code=400, detail=f"Validation Error: {str(ve)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/calculate-isai")
+def calculate_isai(request: ISAIRequest):
+    rate_str = os.environ.get("tasa_isai_manzanillo", "0.03")
+    try:
+        from decimal import Decimal
+        rate = Decimal(rate_str)
+        isai = calculate_isai_manzanillo(request.operation_price, request.cadastral_value, rate)
+        return {"status": "success", "isai": isai}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error calculating ISAI: {str(e)}")
+
+@app.post("/api/v1/extract-data")
+def extract_data(request: ExtractDataRequest):
+    result = process_pdf_base64(request.pdf_base64)
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+    return {"status": "success", "data": result}
 
 @app.get("/")
 def root():
