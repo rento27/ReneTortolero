@@ -53,14 +53,17 @@ def sanitize_name(name: str) -> str:
     if not name:
         return ""
 
+    # Remove extra internal whitespace and trim first to allow $ anchors to match correctly
+    clean_name = " ".join(name.split())
+
     # Remove commas which often precede the regime
-    clean_name = name.replace(",", "")
+    clean_name = clean_name.replace(",", "")
 
     # Remove the regime using regex
     clean_name = REGIME_REGEX.sub("", clean_name)
 
-    # Remove extra internal whitespace and trim
-    clean_name = " ".join(clean_name.split())
+    # Trim again just in case the regex left trailing whitespace
+    clean_name = clean_name.strip()
 
     # Normalize unicode to remove accents (NFD decomposition)
     clean_name = unicodedata.normalize('NFD', clean_name)
