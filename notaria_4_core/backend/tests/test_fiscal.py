@@ -13,6 +13,9 @@ def test_sanitize_name():
     assert sanitize_name("  Espacios  Extra  ") == "ESPACIOS EXTRA"
     assert sanitize_name("Árbol") == "ARBOL"
 
+def test_sanitize_name_trailing_space():
+    assert sanitize_name("INMOBILIARIA DEL PACIFICO, S.A. DE C.V. ") == "INMOBILIARIA DEL PACIFICO"
+
 def test_validate_copropiedad_success():
     percentages = [Decimal("50.00"), Decimal("50.00")]
     assert validate_copropiedad(percentages) is True
@@ -21,6 +24,13 @@ def test_validate_copropiedad_fail():
     percentages = [Decimal("33.33"), Decimal("33.33"), Decimal("33.33")]
     with pytest.raises(ValueError):
         validate_copropiedad(percentages)
+
+def test_validate_copropiedad_strict():
+    with pytest.raises(ValueError):
+        validate_copropiedad([Decimal("99.99")])
+    with pytest.raises(ValueError):
+        validate_copropiedad([Decimal("100.01")])
+    assert validate_copropiedad([Decimal("100.00")]) is True
 
 def test_calculate_retentions_moral():
     # RFC 12 chars
@@ -61,3 +71,7 @@ def test_validate_postal_code():
 
     # Unknown CP
     assert validate_postal_code("99999") is False
+
+def test_validate_postal_code_correctness():
+    assert validate_postal_code("06600") is True
+    assert validate_postal_code("06600", "CMX") is True
