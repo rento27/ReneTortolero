@@ -1,39 +1,13 @@
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
 from typing import List, Optional, Any
 from decimal import Decimal
 from lib.fiscal_engine import sanitize_name, calculate_isai_manzanillo, calculate_retentions, validate_postal_code
 from lib.xml_generator import generate_signed_xml
+from lib.api_models import InvoiceRequest, ISAIRequest
+from lib.ocr_engine import extract_from_pdf
+from pydantic import BaseModel
 
 app = FastAPI(title="Notaria 4 Digital Core API", version="1.0.0")
-
-class Receptor(BaseModel):
-    rfc: str
-    nombre: str
-    uso_cfdi: str
-    domicilio_fiscal: str
-
-class Concepto(BaseModel):
-    clave_prod_serv: str
-    cantidad: Decimal
-    clave_unidad: str
-    descripcion: str
-    valor_unitario: Decimal
-    importe: Decimal
-    objeto_imp: str
-
-class Copropietario(BaseModel):
-    nombre: str
-    rfc: str
-    porcentaje: Decimal
-
-class InvoiceRequest(BaseModel):
-    receptor: Receptor
-    conceptos: List[Concepto]
-    subtotal: Decimal
-    total: Decimal
-    copropietarios: Optional[List[Copropietario]] = None
-    datos_extra: Optional[dict] = None
 
 @app.get("/health")
 def health_check():
@@ -70,6 +44,27 @@ def create_cfdi(request: InvoiceRequest):
         }
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=f"Validation Error: {str(ve)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/calculate-isai")
+def calculate_isai(request: ISAIRequest):
+    try:
+        isai = calculate_isai_manzanillo(request.operation_price, request.cadastral_value)
+        return {"status": "success", "isai_calculated": str(isai)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class ExtractDataRequest(BaseModel):
+    pdf_bytes_base64: str
+
+@app.post("/api/v1/extract-data")
+def extract_data(request: ExtractDataRequest):
+    import base64
+    try:
+        pdf_bytes = base64.b64decode(request.pdf_bytes_base64)
+        text = extract_from_pdf(pdf_bytes)
+        return {"status": "success", "text_extracted": text}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
