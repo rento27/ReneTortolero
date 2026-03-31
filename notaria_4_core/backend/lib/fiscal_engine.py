@@ -56,11 +56,13 @@ def sanitize_name(name: str) -> str:
     # Remove commas which often precede the regime
     clean_name = name.replace(",", "")
 
+    # Remove extra internal whitespace and trim
+    clean_name = " ".join(clean_name.split())
+
     # Remove the regime using regex
     clean_name = REGIME_REGEX.sub("", clean_name)
 
-    # Remove extra internal whitespace and trim
-    clean_name = " ".join(clean_name.split())
+    clean_name = clean_name.strip()
 
     # Normalize unicode to remove accents (NFD decomposition)
     clean_name = unicodedata.normalize('NFD', clean_name)
