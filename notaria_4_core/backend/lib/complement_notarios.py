@@ -47,10 +47,7 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
         raise ValueError(f"fecha_inst_notarial must be in YYYY-MM-DD format, got '{fecha_inst}'")
 
     # Try parsing the date strictly to ensure it's a valid calendar date
-    try:
-        datetime.strptime(fecha_inst, "%Y-%m-%d")
-    except ValueError as e:
-        raise ValueError(f"Invalid date for fecha_inst_notarial: {e}")
+    datetime.strptime(fecha_inst, "%Y-%m-%d")
 
     # Build Inmuebles
     desc_inmuebles = []
@@ -100,7 +97,7 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
 
     if adquiriente_cop_sc_list:
         datos_adquiriente = notariospublicos10.DatosAdquiriente(
-            datos_adquirientes_cop_sc=adquiriente_cop_sc_list
+            datos_adquiriente_cop_sc=adquiriente_cop_sc_list
         )
     else:
         datos_adquiriente = notariospublicos10.DatosAdquiriente(
@@ -119,7 +116,7 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
         nombre, paterno, materno = split_name(ena.nombre, ena.apellido_paterno, ena.apellido_materno)
         if ena.copro_soc_conyugal_e == 'Si':
             enajenante_cop_sc_list.append(
-                notariospublicos10.DatosEnajenantesCopSC(
+                notariospublicos10.DatosEnajenanteCopSC(
                     nombre=nombre,
                     apellido_paterno=paterno,
                     apellido_materno=materno,
@@ -144,7 +141,7 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
 
     if enajenante_cop_sc_list:
         datos_enajenante = notariospublicos10.DatosEnajenante(
-            datos_enajenantes_cop_sc=enajenante_cop_sc_list
+            datos_enajenante_cop_sc=enajenante_cop_sc_list
         )
     else:
         datos_enajenante = notariospublicos10.DatosEnajenante(
