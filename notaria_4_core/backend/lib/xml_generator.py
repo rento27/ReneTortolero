@@ -125,13 +125,7 @@ def generate_signed_xml(invoice_data: dict) -> bytes:
         # 5. Signing
         signer = load_signer_from_secret_manager()
         if signer is None:
-            # Check if we should allow unsigned for tests
-            import os
-            if os.environ.get("MOCK_SIGNER") != "1":
-                raise ValueError("Signer could not be loaded from Secret Manager.")
-
-            # Unsigned stub string return
-            return cfdi.xml_bytes()
+            raise ValueError("Signer could not be loaded from Secret Manager.")
         else:
             cfdi.sign(signer)
             return cfdi.xml_bytes()
