@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="es" class="">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MPA STUDIO - Generador de Guiones</title>
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Google Material Symbols -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="styles/styles.css">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        orbitron: ['Orbitron', 'sans-serif'],
+                        rajdhani: ['Rajdhani', 'sans-serif'],
+                    },
+                    colors: {
+                        'neon-purple': '#A020F0',
+                        'vibrant-orange': '#FFA500',
+                        'deep-space-black': '#0D0D1A',
+                        'text-primary': '#E0E0E0',
+                        'text-secondary': '#A0A0A0',
+                        'glass-bg': 'rgba(13, 13, 26, 0.6)',
+                        'border-glow': 'rgba(160, 32, 240, 0.3)',
+                        'success': '#34D399',
+                        'warning': '#FBBF24',
+                        'danger': '#F471B5',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+
+<body class="bg-deep-space-black font-rajdhani text-text-primary flex scroll-smooth">
+
+    <!-- Sidebar Container -->
+    <div id="sidebar-container"></div>
+
+    <!-- Main Content -->
+    <div class="flex-1 flex flex-col min-h-screen">
+
+        <!-- Header Container -->
+        <div id="header-container"></div>
+
+        <!-- Main Content -->
+        <main class="p-6 flex-grow">
+            <!-- Top Status Panel -->
+            <div class="mb-8 flex flex-col md:flex-row gap-6 items-center justify-between glassmorphism p-6 rounded-lg shadow-lg">
+                <div>
+                    <h1 class="font-orbitron text-2xl font-bold text-neon-purple mb-1">GENERADOR DE GUIONES (MULTI-GRID)</h1>
+                    <p class="text-sm text-text-secondary font-orbitron flex items-center gap-2">
+                        <span class="material-symbols-outlined text-success text-base">lock</span>
+                        <span>RESEARCH LOCK: </span>
+                        <span class="text-success font-semibold">ACTIVADO</span>
+                    </p>
+                </div>
+            </div>
+
+            <!-- Multi-Grid Container -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6">
+
+                <!-- YouTube Column -->
+                <div class="glassmorphism p-5 rounded-lg flex flex-col gap-4">
+                    <div class="flex items-center gap-3">
+                        <svg class="w-8 h-8 text-vibrant-orange" viewBox="0 0 28 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M27.9727 3.12324C27.6435 1.89323 26.6768 0.926623 25.4468 0.597366C23.2197 2.24288e-07 14.285 0 14.285 0C14.285 0 5.35042 2.24288e-07 3.12323 0.597366C1.89323 0.926623 0.926623 1.89323 0.597366 3.12324C2.24288e-07 5.35042 0 10 0 10C0 10 2.24288e-07 14.6496 0.597366 16.8768C0.926623 18.1068 1.89323 19.0734 3.12323 19.4026C5.35042 20 14.285 20 14.285 20C14.285 20 23.2197 20 25.4468 19.4026C26.6768 19.0734 27.6435 18.1068 27.9727 16.8768C28.5701 14.6496 28.5701 10 28.5701 10C28.5701 10 28.5677 5.35042 27.9727 3.12324Z"/><path d="M11.4253 14.2854L18.8477 10.0004L11.4253 5.71533V14.2854Z" fill="white"/></svg>
+                        <h2 class="font-orbitron text-xl font-bold text-vibrant-orange">YOUTUBE</h2>
+                    </div>
+                    <div class="flex flex-col gap-1"><label class="text-xs font-rajdhani font-bold text-neon-purple">HOOK (1-3s)</label><textarea class="script-textarea bg-deep-space-black/50 border-neon-purple/50 rounded-md text-text-primary focus:ring-vibrant-orange focus:border-vibrant-orange font-rajdhani text-sm p-2" rows="2" data-platform="youtube" data-section="hook"></textarea><div class="word-counter text-xs text-right text-text-secondary pr-1" id="wc-youtube-hook">0 palabras</div></div>
+                    <div class="flex flex-col gap-1"><label class="text-xs font-rajdhani font-bold text-neon-purple">CUERPO / DESARROLLO</label><textarea class="script-textarea bg-deep-space-black/50 border-neon-purple/50 rounded-md text-text-primary focus:ring-vibrant-orange focus:border-vibrant-orange font-rajdhani text-sm p-2" rows="5" data-platform="youtube" data-section="body"></textarea><div class="word-counter text-xs text-right text-text-secondary pr-1" id="wc-youtube-body">0 palabras</div></div>
+                    <div class="flex flex-col gap-1"><label class="text-xs font-rajdhani font-bold text-neon-purple">CIERRE / CTA</label><textarea class="script-textarea bg-deep-space-black/50 border-neon-purple/50 rounded-md text-text-primary focus:ring-vibrant-orange focus:border-vibrant-orange font-rajdhani text-sm p-2" rows="2" data-platform="youtube" data-section="cta"></textarea><div class="word-counter text-xs text-right text-text-secondary pr-1" id="wc-youtube-cta">0 palabras</div></div>
+                    <div class="flex flex-col gap-1"><label class="text-xs font-rajdhani font-bold text-text-secondary">BRIDGE &gt;</label><textarea class="script-textarea bg-deep-space-black/50 border-neon-purple/30 rounded-md text-text-primary focus:ring-vibrant-orange focus:border-vibrant-orange font-rajdhani text-sm p-2" rows="1" data-platform="youtube" data-section="bridge"></textarea><div class="word-counter text-xs text-right text-text-secondary pr-1" id="wc-youtube-bridge">0 palabras</div></div>
+                </div>
+
+                <!-- TikTok Column -->
+                <div class="glassmorphism p-5 rounded-lg flex flex-col gap-4">
+                    <div class="flex items-center gap-3">
+                        <svg class="w-8 h-8 text-vibrant-orange" viewBox="0 0 96 96" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M73.31 25.7456C72.785 25.4743 72.274 25.1769 71.7788 24.8545C70.3389 23.9025 69.0186 22.7808 67.8465 21.5135C64.9139 18.158 63.8186 14.7538 63.4151 12.3705H63.4313C63.0943 10.3921 63.2337 9.11214 63.2547 9.11214H49.8974V60.7624C49.8974 61.4558 49.8974 62.1412 49.8682 62.8185C49.8682 62.9027 49.8601 62.9805 49.8553 63.0712C49.8553 63.1085 49.8553 63.1474 49.8472 63.1863C49.8472 63.196 49.8472 63.2057 49.8472 63.2154C49.7064 65.0686 49.1123 66.8588 48.1173 68.4286C47.1222 69.9983 45.7566 71.2994 44.1407 72.2175C42.4565 73.1757 40.5517 73.6782 38.614 73.6757C32.3906 73.6757 27.3468 68.6011 27.3468 62.334C27.3468 56.0669 32.3906 50.9923 38.614 50.9923C39.7921 50.9912 40.9629 51.1766 42.083 51.5415L42.0992 37.9412C38.6989 37.502 35.2444 37.7722 31.9538 38.7348C28.6631 39.6975 25.6077 41.3317 22.9802 43.5343C20.678 45.5346 18.7425 47.9214 17.2608 50.5872C16.6969 51.5594 14.5695 55.4658 14.3119 61.8058C14.1499 65.4044 15.2306 69.1326 15.7458 70.6734V70.7058C16.0699 71.6132 17.3256 74.7094 19.372 77.3197C21.0221 79.4135 22.9716 81.2527 25.1579 82.7783V82.7459L25.1903 82.7783C31.6567 87.1724 38.8263 86.884 38.8263 86.884C40.0674 86.8338 44.2249 86.884 48.9463 84.6464C54.183 82.1658 57.1642 78.47 57.1642 78.47C59.0688 76.2618 60.5832 73.7452 61.6426 71.0282C62.8513 67.8509 63.2547 64.0401 63.2547 62.5171V35.1155C63.4168 35.2127 65.5749 36.6401 65.5749 36.6401C65.5749 36.6401 68.6842 38.633 73.5352 39.9309C77.0155 40.8544 81.7045 41.0488 81.7045 41.0488V27.7887C80.0615 27.9669 76.7255 27.4485 73.31 25.7456Z" fill="#FFFFFF"/></svg>
+                        <h2 class="font-orbitron text-xl font-bold text-vibrant-orange">TIKTOK</h2>
+                    </div>
+                    <div class="flex flex-col gap-1"><label class="text-xs font-rajdhani font-bold text-neon-purple">HOOK (1-3s)</label><textarea class="script-textarea bg-deep-space-black/50 border-neon-purple/50 rounded-md text-text-primary focus:ring-vibrant-orange focus:border-vibrant-orange font-rajdhani text-sm p-2" rows="2" data-platform="tiktok" data-section="hook"></textarea><div class="word-counter text-xs text-right text-text-secondary pr-1" id="wc-tiktok-hook">0 palabras</div></div>
+                    <div class="flex flex-col gap-1"><label class="text-xs font-rajdhani font-bold text-neon-purple">CUERPO / DESARROLLO</label><textarea class="script-textarea bg-deep-space-black/50 border-neon-purple/50 rounded-md text-text-primary focus:ring-vibrant-orange focus:border-vibrant-orange font-rajdhani text-sm p-2" rows="5" data-platform="tiktok" data-section="body"></textarea><div class="word-counter text-xs text-right text-text-secondary pr-1" id="wc-tiktok-body">0 palabras</div></div>
+                    <div class="flex flex-col gap-1"><label class="text-xs font-rajdhani font-bold text-neon-purple">CIERRE / CTA</label><textarea class="script-textarea bg-deep-space-black/50 border-neon-purple/50 rounded-md text-text-primary focus:ring-vibrant-orange focus:border-vibrant-orange font-rajdhani text-sm p-2" rows="2" data-platform="tiktok" data-section="cta"></textarea><div class="word-counter text-xs text-right text-text-secondary pr-1" id="wc-tiktok-cta">0 palabras</div></div>
+                    <div class="flex flex-col gap-1"><label class="text-xs font-rajdhani font-bold text-text-secondary">BRIDGE &gt;</label><textarea class="script-textarea bg-deep-space-black/50 border-neon-purple/30 rounded-md text-text-primary focus:ring-vibrant-orange focus:border-vibrant-orange font-rajdhani text-sm p-2" rows="1" data-platform="tiktok" data-section="bridge"></textarea><div class="word-counter text-xs text-right text-text-secondary pr-1" id="wc-tiktok-bridge">0 palabras</div></div>
+                </div>
+
+                <!-- Instagram Column -->
+                <div class="glassmorphism p-5 rounded-lg flex flex-col gap-4">
+                    <div class="flex items-center gap-3">
+                        <svg class="w-8 h-8 text-vibrant-orange" viewBox="0 0 512 512" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M256,49.471c67.266,0,75.233.257,101.8,1.469,24.562,1.121,37.9,5.224,46.778,8.674a78.052,78.052,0,0,1,28.966,18.845,78.052,78.052,0,0,1,18.845,28.966c3.45,8.877,7.554,22.216,8.674,46.778,1.212,26.565,1.469,34.532,1.469,101.8s-0.257,75.233-1.469,101.8c-1.121,24.562-5.225,37.9-8.674,46.778a83.427,83.427,0,0,1-47.811,47.811c-8.877,3.45-22.216,7.554-46.778,8.674-26.56,1.212-34.527,1.469-101.8,1.469s-75.237-.257-101.8-1.469c-24.562-1.121-37.9-5.225-46.778-8.674a78.051,78.051,0,0,1-28.966-18.845,78.053,78.053,0,0,1-18.845-28.966c-3.45-8.877-7.554-22.216-8.674-46.778-1.212-26.564-1.469-34.532-1.469-101.8s0.257-75.233,1.469-101.8c1.121-24.562,5.224-37.9,8.674-46.778A78.052,78.052,0,0,1,78.458,78.458a78.053,78.053,0,0,1,28.966-18.845c8.877-3.45,22.216-7.554,46.778-8.674,26.565-1.212,34.532-1.469,101.8-1.469m0-45.391c-68.418,0-77,.29-103.866,1.516-26.815,1.224-45.127,5.482-61.151,11.71a123.488,123.488,0,0,0-44.62,29.057A123.488,123.488,0,0,0,17.3,90.982C11.077,107.007,6.819,125.319,5.6,152.134,4.369,179,4.079,187.582,4.079,256S4.369,333,5.6,359.866c1.224,26.815,5.482,45.127,11.71,61.151a123.489,123.489,0,0,0,29.057,44.62,123.486,123.486,0,0,0,44.62,29.057c16.025,6.228,34.337,10.486,61.151,11.71,26.87,1.226,35.449,1.516,103.866,1.516s77-.29,103.866-1.516c26.815-1.224,45.127-5.482,61.151-11.71a128.817,128.817,0,0,0,73.677-73.677c6.228-16.025,10.486-34.337,11.71-61.151,1.226-26.87,1.516-35.449,1.516-103.866s-0.29-77-1.516-103.866c-1.224-26.815-5.482-45.127-11.71-61.151a123.486,123.486,0,0,0-29.057-44.62A123.487,123.487,0,0,0,421.018,17.3C404.993,11.077,386.681,6.819,359.866,5.6,333,4.369,324.418,4.079,256,4.079h0Z"/><path d="M256,126.635A129.365,129.365,0,1,0,385.365,256,129.365,129.365,0,0,0,256,126.635Zm0,213.338A83.973,83.973,0,1,1,339.974,256,83.974,83.974,0,0,1,256,339.973Z"/><circle cx="390.476" cy="121.524" r="30.23"/></svg>
+                        <h2 class="font-orbitron text-xl font-bold text-vibrant-orange">INSTAGRAM</h2>
+                    </div>
+                    <div class="flex flex-col gap-1"><label class="text-xs font-rajdhani font-bold text-neon-purple">HOOK (1-3s)</label><textarea class="script-textarea bg-deep-space-black/50 border-neon-purple/50 rounded-md text-text-primary focus:ring-vibrant-orange focus:border-vibrant-orange font-rajdhani text-sm p-2" rows="2" data-platform="instagram" data-section="hook"></textarea><div class="word-counter text-xs text-right text-text-secondary pr-1" id="wc-instagram-hook">0 palabras</div></div>
+                    <div class="flex flex-col gap-1"><label class="text-xs font-rajdhani font-bold text-neon-purple">CUERPO / DESARROLLO</label><textarea class="script-textarea bg-deep-space-black/50 border-neon-purple/50 rounded-md text-text-primary focus:ring-vibrant-orange focus:border-vibrant-orange font-rajdhani text-sm p-2" rows="5" data-platform="instagram" data-section="body"></textarea><div class="word-counter text-xs text-right text-text-secondary pr-1" id="wc-instagram-body">0 palabras</div></div>
+                    <div class="flex flex-col gap-1"><label class="text-xs font-rajdhani font-bold text-neon-purple">CIERRE / CTA</label><textarea class="script-textarea bg-deep-space-black/50 border-neon-purple/50 rounded-md text-text-primary focus:ring-vibrant-orange focus:border-vibrant-orange font-rajdhani text-sm p-2" rows="2" data-platform="instagram" data-section="cta"></textarea><div class="word-counter text-xs text-right text-text-secondary pr-1" id="wc-instagram-cta">0 palabras</div></div>
+                    <div class="flex flex-col gap-1"><label class="text-xs font-rajdhani font-bold text-text-secondary">BRIDGE &gt;</label><textarea class="script-textarea bg-deep-space-black/50 border-neon-purple/30 rounded-md text-text-primary focus:ring-vibrant-orange focus:border-vibrant-orange font-rajdhani text-sm p-2" rows="1" data-platform="instagram" data-section="bridge"></textarea><div class="word-counter text-xs text-right text-text-secondary pr-1" id="wc-instagram-bridge">0 palabras</div></div>
+                </div>
+
+                <!-- Facebook Column -->
+                <div class="glassmorphism p-5 rounded-lg flex flex-col gap-4">
+                    <div class="flex items-center gap-3">
+                        <svg class="w-8 h-8 text-vibrant-orange" viewBox="0 0 667 667" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M 600,350 C 600,488.071 488.071,600 350,600 211.929,600 100,488.071 100,350 100,232.755 180.715,134.378 289.606,107.362 v 166.242 h -51.552 V 350 h 51.552 v 32.919 c 0,85.092 38.508,124.532 122.048,124.532 15.838,0 43.167,-3.105 54.347,-6.211 V 431.986 c -5.901,0.621 -16.149,0.932 -28.882,0.932 -40.993,0 -56.832,-15.528 -56.832,-55.9 V 350 h 81.659 l -14.028,-76.396 h -67.631 V 101.831 C 504.073,116.782 600,222.182 600,350 Z" style="fill:#0866ff;"/><path d="M 447.918,273.604 461.947,350 H 380.288 v 27.019 c 0,40.372 15.838,55.899 56.831,55.899 12.733,0 22.981,-0.31 28.882,-0.931 v 69.253 c -11.18,3.106 -38.509,6.212 -54.347,6.212 -83.539,0 -122.048,-39.441 -122.048,-124.533 V 350 h -51.552 v -76.396 h 51.552 v -166.242 c 19.343,-4.798 39.568,-7.362 60.394,-7.362 10.254,0 20.358,0.632 30.288,1.831 L 380.288,273.604 Z" style="fill:#ffffff;"/></svg>
+                        <h2 class="font-orbitron text-xl font-bold text-vibrant-orange">FACEBOOK</h2>
+                    </div>
+                    <div class="flex flex-col gap-1"><label class="text-xs font-rajdhani font-bold text-neon-purple">HOOK (1-3s)</label><textarea class="script-textarea bg-deep-space-black/50 border-neon-purple/50 rounded-md text-text-primary focus:ring-vibrant-orange focus:border-vibrant-orange font-rajdhani text-sm p-2" rows="2" data-platform="facebook" data-section="hook"></textarea><div class="word-counter text-xs text-right text-text-secondary pr-1" id="wc-facebook-hook">0 palabras</div></div>
+                    <div class="flex flex-col gap-1"><label class="text-xs font-rajdhani font-bold text-neon-purple">CUERPO / DESARROLLO</label><textarea class="script-textarea bg-deep-space-black/50 border-neon-purple/50 rounded-md text-text-primary focus:ring-vibrant-orange focus:border-vibrant-orange font-rajdhani text-sm p-2" rows="5" data-platform="facebook" data-section="body"></textarea><div class="word-counter text-xs text-right text-text-secondary pr-1" id="wc-facebook-body">0 palabras</div></div>
+                    <div class="flex flex-col gap-1"><label class="text-xs font-rajdhani font-bold text-neon-purple">CIERRE / CTA</label><textarea class="script-textarea bg-deep-space-black/50 border-neon-purple/50 rounded-md text-text-primary focus:ring-vibrant-orange focus:border-vibrant-orange font-rajdhani text-sm p-2" rows="2" data-platform="facebook" data-section="cta"></textarea><div class="word-counter text-xs text-right text-text-secondary pr-1" id="wc-facebook-cta">0 palabras</div></div>
+                    <div class="flex flex-col gap-1"><label class="text-xs font-rajdhani font-bold text-text-secondary">BRIDGE &gt;</label><textarea class="script-textarea bg-deep-space-black/50 border-neon-purple/30 rounded-md text-text-primary focus:ring-vibrant-orange focus:border-vibrant-orange font-rajdhani text-sm p-2" rows="1" data-platform="facebook" data-section="bridge"></textarea><div class="word-counter text-xs text-right text-text-secondary pr-1" id="wc-facebook-bridge">0 palabras</div></div>
+                </div>
+
+            </div>
+
+            <!-- Action Button -->
+            <div class="mt-8 flex justify-end">
+                <button class="bg-vibrant-orange text-deep-space-black font-orbitron font-bold text-lg py-3 px-8 rounded-lg hover:bg-opacity-80 transition-all duration-300 flex items-center gap-3">
+                    <span>Generar Escenas & Prompts</span>
+                    <span class="material-symbols-outlined">arrow_forward</span>
+                </button>
+            </div>
+        </main>
+
+        <!-- Footer Container -->
+        <div id="footer-container"></div>
+    </div>
+
+    <script>
+        const loadComponent = (url, containerId) => {
+            fetch(url)
+                .then(response => response.text())
+                .then(data => {
+                    document.getElementById(containerId).innerHTML = data;
+                    if (containerId === 'sidebar-container') {
+                        const event = new CustomEvent('sidebarLoaded');
+                        document.dispatchEvent(event);
+                    }
+                });
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadComponent('components/sidebar.html', 'sidebar-container');
+            loadComponent('components/header.html', 'header-container');
+            loadComponent('components/footer.html', 'footer-container');
+        });
+
+        document.addEventListener('sidebarLoaded', () => {
+            const navLinks = document.querySelectorAll('#sidebar-container nav a');
+            navLinks.forEach(link => {
+                if (link.getAttribute('href') === 'scripts.html') {
+                    link.classList.add('bg-neon-purple/20', 'text-text-primary');
+                    link.classList.remove('text-text-secondary');
+                } else {
+                    link.classList.remove('bg-neon-purple/20', 'text-text-primary');
+                    link.classList.add('text-text-secondary');
+                }
+            });
+        });
+
+        // Word Counter Logic
+        document.addEventListener('DOMContentLoaded', () => {
+            const textareas = document.querySelectorAll('.script-textarea');
+
+            textareas.forEach(textarea => {
+                textarea.addEventListener('input', () => {
+                    const text = textarea.value.trim();
+                    const words = text.split(/\s+/).filter(word => word.length > 0);
+                    const wordCount = words.length;
+
+                    const platform = textarea.dataset.platform;
+                    const section = textarea.dataset.section;
+                    const counterElement = document.getElementById(`wc-${platform}-${section}`);
+
+                    if (counterElement) {
+                        counterElement.textContent = `${wordCount} palabras`;
+
+                        // Reset colors
+                        counterElement.classList.remove('text-success', 'text-danger', 'text-text-secondary');
+
+                        if (wordCount > 0 && (wordCount < 16 || wordCount > 24)) {
+                            counterElement.classList.add('text-danger');
+                        } else if (wordCount >= 16 && wordCount <= 24) {
+                            counterElement.classList.add('text-success');
+                        } else {
+                             counterElement.classList.add('text-text-secondary');
+                        }
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>

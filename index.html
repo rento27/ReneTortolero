@@ -1,48 +1,232 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8">
-      <meta name="viewport" content="width=device-width,user-scalable=no">
-    <title>Examen final HTML</title>
-  </head>
-  <body>
-<img src="rt1.svg" alt="logo" title="logo" width="150" height="150">
-        <h1>Curriculum Vitae</h1><br/>
-        <h2>Rene Manuel Tortolero Roldan</h2>
-<ul>
-        <li><a href="index.html">Inicio</a></li>
-        <li><a href="educacion.html">Educacion</a></li>
-        <li><a href="experiencia.html">Experiencia</a></li>
-</ul>
-<br/>
+<html lang="es" class="">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MPA STUDIO - Mission Control</title>
 
-        <h2>Datos Personales</h2>
-<img src="qw.jpg" alt="logo" title="logo" width="150" height="150">
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
 
-<ul>
-      <li><strong>Nombre:</strong> Manuel</li>
-      <li><strong>Apellido:</strong> Tortolero</li>
-      <li><strong>Edad:</strong> 28</li>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-</ul>
+    <!-- Google Material Symbols -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
 
-        <h2>Informacíon de Perfil</h2>
-        <p>Desempeñarme, ofrecer y desarrollar todas mis capacidades innatas, consiguiendo un excelente resultado en la labor y el área asignada;
-          además, adquirir a través de la responsabilidad y confianza en mí depositada, una experiencia inigualable, con la cual conseguiré un
-          paso importante en mi superación personal, junto con el orgullo de hacer parte de su equipo de trabajo.</p>
-<ul>
-          <li><strong>Perfil:</strong>Abogado</li>
-          <li><strong>Idiomas:</strong>Esàñol, Ingles</li>
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="styles/styles.css">
 
-</ul>
-  </body>
-  <footer>Derechos Reservados
-<ul>
-  <li><strong>Email:</strong><a href="mailto:rento19@gmail.com?subject=feedback">rento19@gmail.com</a></li> <a href="mailto:rento19@gmail.com?subject=feedback"></a>
-  <li><strong>Facebook:</strong><a href="https://www.facebook.com/torto1988">Facebook</a></li>
-  <li><strong>Teléfono:</strong>3141470101</li>
-  <li><strong>Direccion:</strong>Blvd. Miguel de la Madrid 1164-A, Las palmas, Salagua, Manzanillo, Colima. 28869</li>
-</ul>
-  </footer>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        orbitron: ['Orbitron', 'sans-serif'],
+                        rajdhani: ['Rajdhani', 'sans-serif'],
+                    },
+                    colors: {
+                        'neon-purple': '#A020F0',
+                        'vibrant-orange': '#FFA500',
+                        'deep-space-black': '#0D0D1A',
+                        'text-primary': '#E0E0E0',
+                        'text-secondary': '#A0A0A0',
+                        'glass-bg': 'rgba(13, 13, 26, 0.6)',
+                        'border-glow': 'rgba(160, 32, 240, 0.3)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
 
+<body class="bg-deep-space-black font-rajdhani text-text-primary flex scroll-smooth">
+
+    <!-- Sidebar Container -->
+    <div id="sidebar-container"></div>
+
+    <!-- Main Content -->
+    <div class="flex-1 flex flex-col">
+
+        <!-- Header Container -->
+        <div id="header-container"></div>
+
+        <!-- Dashboard Grid -->
+        <main class="p-6 flex-grow">
+            <div class="grid grid-cols-12 grid-rows-6 gap-6 h-full">
+
+                <!-- Stat Cards -->
+                <div class="col-span-3 row-span-1 glassmorphism p-4 flex items-center gap-4 neon-glow-purple">
+                    <span class="material-symbols-outlined text-5xl text-neon-purple">view_in_ar</span>
+                    <div>
+                        <p class="text-text-secondary">Render Queue</p>
+                        <p class="text-2xl font-orbitron font-bold">24/30</p>
+                    </div>
+                    <div class="ml-auto text-right">
+                        <span class="text-green-400 font-semibold flex items-center"><span class="material-symbols-outlined text-sm">arrow_upward</span>+12%</span>
+                    </div>
+                </div>
+                <div class="col-span-3 row-span-1 glassmorphism p-4 flex items-center gap-4">
+                    <span class="material-symbols-outlined text-5xl text-red-500">memory</span>
+                    <div>
+                        <p class="text-text-secondary">CPU Load</p>
+                        <p class="text-2xl font-orbitron font-bold">92%</p>
+                    </div>
+                    <div class="ml-auto text-right">
+                         <span class="text-red-500 font-semibold flex items-center"><span class="material-symbols-outlined text-sm">warning</span> HIGH</span>
+                    </div>
+                </div>
+                 <div class="col-span-3 row-span-1 glassmorphism p-4 flex items-center gap-4">
+                    <span class="material-symbols-outlined text-5xl text-vibrant-orange">schedule</span>
+                    <div>
+                        <p class="text-text-secondary">ETA Completion</p>
+                        <p class="text-2xl font-orbitron font-bold">04:20<span class="text-base">hrs</span></p>
+                    </div>
+                     <div class="ml-auto text-right">
+                         <span class="text-green-400 font-semibold">On Schedule</span>
+                    </div>
+                </div>
+                 <div class="col-span-3 row-span-1 glassmorphism p-4 flex items-center gap-4">
+                    <span class="material-symbols-outlined text-5xl text-sky-400">folder_open</span>
+                    <div>
+                        <p class="text-text-secondary">Storage</p>
+                        <p class="text-2xl font-orbitron font-bold">12.4<span class="text-base">TB</span></p>
+                    </div>
+                     <div class="ml-auto text-right">
+                         <span class="text-text-secondary text-xs">240TB TOTAL</span>
+                    </div>
+                </div>
+
+                <!-- Analytics -->
+                <div class="col-span-8 row-span-3 glassmorphism p-6 flex flex-col">
+                    <div class="flex justify-between items-center">
+                        <h3 class="text-xl font-orbitron text-neon-purple flex items-center gap-2"><span class="material-symbols-outlined">analytics</span>Analytics (Rendimiento de Videos)</h3>
+                        <a href="#" class="text-sm text-vibrant-orange hover:underline flex items-center gap-1">Full Analytics <span class="material-symbols-outlined text-base">arrow_forward</span></a>
+                    </div>
+                    <div class="grid grid-cols-3 gap-6 mt-4 flex-grow">
+                        <div class="bg-deep-space-black/30 p-4 rounded-lg flex flex-col justify-between">
+                            <p class="text-text-secondary">Total Views</p>
+                            <p class="text-4xl font-orbitron font-bold my-2">1.2M</p>
+                            <div>
+                                <span class="text-green-400 font-semibold flex items-center"><span class="material-symbols-outlined text-lg">trending_up</span> +24%</span>
+                                <p class="text-xs text-text-secondary">LAST 30 DAYS</p>
+                            </div>
+                        </div>
+                         <div class="bg-deep-space-black/30 p-4 rounded-lg flex flex-col justify-between">
+                            <p class="text-text-secondary">Avg. CTR</p>
+                            <p class="text-4xl font-orbitron font-bold my-2">8.4%</p>
+                            <div>
+                                <span class="text-green-400 font-semibold flex items-center"><span class="material-symbols-outlined text-lg">trending_up</span> +5.2%</span>
+                                <p class="text-xs text-text-secondary">TARGET: 7.0%</p>
+                            </div>
+                        </div>
+                         <div class="bg-deep-space-black/30 p-4 rounded-lg flex flex-col justify-between">
+                            <p class="text-text-secondary">Net Subscribers</p>
+                            <p class="text-4xl font-orbitron font-bold my-2">45.2K</p>
+                            <div>
+                                <span class="text-red-500 font-semibold flex items-center"><span class="material-symbols-outlined text-lg">trending_down</span> -2%</span>
+                                <p class="text-xs text-text-secondary">TOTAL</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Production Pipeline -->
+                <div class="col-span-4 row-span-5 glassmorphism p-6">
+                     <h3 class="text-xl font-orbitron text-neon-purple flex items-center gap-2"><span class="material-symbols-outlined">token</span>Production Pipeline</h3>
+                     <a href="#" class="text-sm text-vibrant-orange hover:underline">View Full Map</a>
+                     <ul class="mt-4 space-y-3">
+                        <li class="flex items-center gap-4 p-3 bg-green-500/10 rounded-lg border-l-4 border-green-500">
+                            <span class="material-symbols-outlined text-green-400 text-3xl">lightbulb</span>
+                            <div><p class="font-bold">Concept</p><p class="text-xs text-text-secondary">DONE</p></div>
+                        </li>
+                         <li class="flex items-center gap-4 p-3 bg-green-500/10 rounded-lg border-l-4 border-green-500">
+                            <span class="material-symbols-outlined text-green-400 text-3xl">view_in_ar</span>
+                            <div><p class="font-bold">Modeling</p><p class="text-xs text-text-secondary">DONE</p></div>
+                        </li>
+                         <li class="flex items-center gap-4 p-3 bg-vibrant-orange/10 rounded-lg border-l-4 border-vibrant-orange">
+                            <span class="material-symbols-outlined text-vibrant-orange text-3xl">animation</span>
+                            <div><p class="font-bold">Anim</p><p class="text-xs text-text-secondary">IN PROGRESS</p></div>
+                        </li>
+                         <li class="flex items-center gap-4 p-3 bg-sky-500/10 rounded-lg border-l-4 border-sky-500">
+                            <span class="material-symbols-outlined text-sky-400 text-3xl">layers</span>
+                            <div><p class="font-bold">Render</p><p class="text-xs text-text-secondary">PENDING</p></div>
+                        </li>
+                        <li class="flex items-center gap-4 p-3 bg-red-500/10 rounded-lg border-l-4 border-red-500">
+                            <span class="material-symbols-outlined text-red-500 text-3xl">auto_fix_high</span>
+                            <div><p class="font-bold">Post</p><p class="text-xs text-text-secondary">PENDING</p></div>
+                        </li>
+                     </ul>
+                </div>
+
+                <!-- System Log -->
+                <div class="col-span-8 row-span-2 glassmorphism p-6 flex flex-col">
+                    <h3 class="text-xl font-orbitron text-neon-purple flex items-center gap-2"><span class="material-symbols-outlined">terminal</span>System Log</h3>
+                    <div class="font-mono text-xs bg-deep-space-black/50 p-4 rounded-lg mt-2 flex-grow overflow-y-auto">
+                        <p><span class="text-text-secondary">[10:42:01] [SYSTEM]</span> Initializing core modules...</p>
+                        <p><span class="text-text-secondary">[10:42:05] [AUTH]</span> User 'Astro' verified. Level 9 access granted.</p>
+                        <p><span class="text-text-secondary">[10:43:12] [NET]</span> Connected to MPA-Mainframe-01.</p>
+                        <p><span class="text-text-secondary">[10:44:00] [RENDER]</span> Frame batch 200-450 queued.</p>
+                        <p><span class="text-yellow-400">[10:45:22] [WARN]</span> High GPU temperature detected (82°C).</p>
+                        <p><span class="text-text-secondary">[10:45:25] [COOLING]</span> Fan speed increased to 100%.</p>
+                        <p><span class="text-text-secondary">[10:46:10] [ASSETS]</span> "Moon_Texture_4k.png" loaded.</p>
+                        <p class="mt-2"><span class="text-vibrant-orange">[10:48:00] ></span> Awaiting command<span class="animate-pulse">_</span></p>
+                    </div>
+                </div>
+
+                <!-- Recent Assets -->
+                <div class="col-span-8 row-span-2 glassmorphism p-6">
+                     <div class="flex justify-between items-center">
+                        <h3 class="text-xl font-orbitron text-neon-purple flex items-center gap-2"><span class="material-symbols-outlined">folder_shared</span>Recent Assets</h3>
+                        <a href="#" class="text-sm text-vibrant-orange hover:underline">View All</a>
+                    </div>
+                    <div class="grid grid-cols-4 gap-4 mt-4">
+                        <div class="bg-deep-space-black/30 p-2 rounded-lg text-center">
+                            <img src="https://via.placeholder.com/150/0D0D1A/A020F0?text=OBJ" class="w-full h-20 object-cover rounded-md mx-auto">
+                            <p class="text-xs mt-2 truncate">bg_corridor_v3.obj</p>
+                        </div>
+                        <div class="bg-deep-space-black/30 p-2 rounded-lg text-center">
+                            <img src="https://via.placeholder.com/150/0D0D1A/A020F0?text=FBX" class="w-full h-20 object-cover rounded-md mx-auto">
+                            <p class="text-xs mt-2 truncate">prop_alien_plant.fbx</p>
+                        </div>
+                        <div class="bg-deep-space-black/30 p-2 rounded-lg text-center">
+                           <img src="https://via.placeholder.com/150/0D0D1A/A020F0?text=WAV" class="w-full h-20 object-cover rounded-md mx-auto">
+                            <p class="text-xs mt-2 truncate">sfx_laser_burst.wav</p>
+                        </div>
+                        <button class="bg-neon-purple/20 border-2 border-dashed border-neon-purple/50 rounded-lg flex flex-col items-center justify-center hover:bg-neon-purple/30 hover:border-neon-purple transition-all">
+                            <span class="material-symbols-outlined text-4xl">add</span>
+                            <span class="text-sm font-semibold">New Upload</span>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+
+        <!-- Footer Container -->
+        <div id="footer-container"></div>
+    </div>
+
+    <script>
+        // Simple script to load reusable components
+        const loadComponent = (url, containerId) => {
+            fetch(url)
+                .then(response => response.text())
+                .then(data => {
+                    document.getElementById(containerId).innerHTML = data;
+                });
+        };
+
+        loadComponent('components/sidebar.html', 'sidebar-container');
+        loadComponent('components/header.html', 'header-container');
+        loadComponent('components/footer.html', 'footer-container');
+    </script>
+</body>
 </html>
