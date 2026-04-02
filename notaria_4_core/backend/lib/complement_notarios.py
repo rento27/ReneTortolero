@@ -59,6 +59,7 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
             notariospublicos10.DescInmueble(
                 tipo_inmueble=inmueble.tipo_inmueble,
                 calle=inmueble.calle,
+                municipio=inmueble.municipio,
                 estado=inmueble.estado,
                 pais=inmueble.pais,
                 codigo_postal=inmueble.codigo_postal
@@ -100,10 +101,12 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
 
     if adquiriente_cop_sc_list:
         datos_adquiriente = notariospublicos10.DatosAdquiriente(
+            copro_soc_conyugal_e="Si",
             datos_adquirientes_cop_sc=adquiriente_cop_sc_list
         )
     else:
         datos_adquiriente = notariospublicos10.DatosAdquiriente(
+            copro_soc_conyugal_e="No",
             datos_un_adquiriente=un_adquiriente
         )
 
@@ -144,10 +147,12 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
 
     if enajenante_cop_sc_list:
         datos_enajenante = notariospublicos10.DatosEnajenante(
+            copro_soc_conyugal_e="Si",
             datos_enajenantes_cop_sc=enajenante_cop_sc_list
         )
     else:
         datos_enajenante = notariospublicos10.DatosEnajenante(
+            copro_soc_conyugal_e="No",
             datos_un_enajenante=un_enajenante
         )
 
