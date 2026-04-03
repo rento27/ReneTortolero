@@ -120,7 +120,12 @@ def generate_signed_xml(invoice_data: dict) -> bytes:
             # Re-instantiate Pydantic model to ensure validation
             comp_model = ComplementoNotariosModel(**invoice_data['complemento_notarios'])
             complemento = create_complemento_notarios(comp_model)
-            cfdi.add_complemento(complemento)
+
+            # Since Comprobante is a dictionary-like object in satcfdi v4,
+            # we need to set the Complemento correctly.
+            # Recreating Comprobante since 'complemento' is part of __init__ kwargs.
+            cfdi_kwargs['complemento'] = complemento
+            cfdi = cfdi40.Comprobante(**cfdi_kwargs)
 
         # 5. Signing
         signer = load_signer_from_secret_manager()
