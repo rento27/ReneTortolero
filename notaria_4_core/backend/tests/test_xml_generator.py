@@ -1,10 +1,10 @@
 import os
 import pytest
+from unittest.mock import patch, MagicMock
 from decimal import Decimal
 from notaria_4_core.backend.lib.xml_generator import generate_signed_xml
 
 def test_generate_xml():
-    os.environ["MOCK_SIGNER"] = "1"
     data = {
         'receptor': {
             'rfc': 'ABC123456T12',
@@ -27,5 +27,39 @@ def test_generate_xml():
         ]
     }
 
-    xml = generate_signed_xml(data)
-    assert xml is not None
+    with patch('notaria_4_core.backend.lib.xml_generator.load_signer_from_secret_manager') as mock_load_signer, \
+         patch('satcfdi.create.cfd.cfdi40.Comprobante.sign') as mock_sign:
+        mock_load_signer.return_value = MagicMock()
+
+        xml = generate_signed_xml(data)
+
+        assert xml is not None
+        mock_load_signer.assert_called_once()
+        mock_sign.assert_called_once_with(mock_load_signer.return_value)
+
+def test_generate_xml_raises_value_error_if_signer_is_none():
+    data = {
+        'receptor': {
+            'rfc': 'ABC123456T12',
+            'nombre': 'EMPRESA SA DE CV',
+            'uso_cfdi': 'G03',
+            'domicilio_fiscal': '28200'
+        },
+        'subtotal': '1000.00',
+        'total': '1053.33',
+        'conceptos': [
+            {
+                'clave_prod_serv': '84111506',
+                'cantidad': '1.00',
+                'clave_unidad': 'E48',
+                'descripcion': 'HONORARIOS NOTARIALES',
+                'valor_unitario': '1000.00',
+                'importe': '1000.00',
+                'objeto_imp': '02'
+            }
+        ]
+    }
+
+    with patch('notaria_4_core.backend.lib.xml_generator.load_signer_from_secret_manager', return_value=None):
+        with pytest.raises(ValueError, match="Signer could not be loaded from Secret Manager."):
+            generate_signed_xml(data)
