@@ -21,9 +21,9 @@ except ImportError:
 try:
     import spacy
     try:
-        nlp = spacy.load("es_core_news_sm")
+        nlp = spacy.load("es_core_news_lg")
     except Exception as e:
-        logger.warning(f"spaCy model 'es_core_news_sm' not found. NLP features disabled. {e}")
+        logger.warning(f"spaCy model 'es_core_news_lg' not found. NLP features disabled. {e}")
         nlp = None
 except ImportError:
     spacy = None
@@ -69,7 +69,11 @@ def extract_structured_data(text: str) -> dict:
     """
     data = {
         "escritura": None,
-        "rfcs": []
+        "rfcs": [],
+        "vendedores": [],
+        "adquirientes": [],
+        "inmuebles": [],
+        "montos": []
     }
 
     # Extract Escritura using deterministic regex
@@ -82,10 +86,42 @@ def extract_structured_data(text: str) -> dict:
     rfc_matches = re.findall(r"[A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3}", text)
     data["rfcs"] = list(set(rfc_matches))  # remove duplicates
 
-    # Stub for NLP
     if nlp:
-        # doc = nlp(text)
-        # NLP logic to extract Adquiriente, Enajenante, Inmueble, etc.
-        pass
+        doc = nlp(text)
+
+        # We need to find specific contexts: "COMPARECE...", "COMPRA..."
+        text_lower = text.lower()
+
+        # Simple heuristic based on NLP named entities and surrounding context
+        for ent in doc.ents:
+            if ent.label_ == "PER":
+                # Find the entity in the original text and check its context
+                start_idx = max(0, ent.start_char - 100)
+                context_before = text_lower[start_idx:ent.start_char]
+
+                if "comparece" in context_before or "vende" in context_before:
+                    data["vendedores"].append(ent.text)
+                elif "compra" in context_before or "adquiere" in context_before:
+                    data["adquirientes"].append(ent.text)
+
+            elif ent.label_ == "LOC":
+                data["inmuebles"].append(ent.text)
+
+            # Values / Montos
+            elif ent.label_ == "MISC" or ent.label_ == "NUM":
+                if "$" in ent.text or "pesos" in ent.text.lower():
+                    data["montos"].append(ent.text)
+
+        # Regex fallback for montos if none found via NLP
+        if not data["montos"]:
+            monto_matches = re.findall(r"\$[\d,]+\.\d{2}", text)
+            if monto_matches:
+                data["montos"] = monto_matches
+
+        # Deduplicate results
+        data["vendedores"] = list(set(data["vendedores"]))
+        data["adquirientes"] = list(set(data["adquirientes"]))
+        data["inmuebles"] = list(set(data["inmuebles"]))
+        data["montos"] = list(set(data["montos"]))
 
     return data

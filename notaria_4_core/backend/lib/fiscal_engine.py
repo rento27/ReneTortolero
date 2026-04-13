@@ -69,11 +69,23 @@ def sanitize_name(name: str) -> str:
     # Basic uppercase conversion as SAT usually expects uppercase
     return clean_name.upper()
 
-def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = Decimal("0.03")) -> Decimal:
+def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = None) -> Decimal:
     """
     Calculates ISAI for Manzanillo.
     Formula: Max(Price, Cadastral) * Rate
+    If rate is None, fetches the rate from Firebase Remote Config (tasa_isai_manzanillo).
     """
+    if rate is None:
+        try:
+            from firebase_admin import remote_config
+            template = remote_config.get_template()
+            if 'tasa_isai_manzanillo' in template.parameters:
+                rate = Decimal(str(template.parameters['tasa_isai_manzanillo'].default_value.value))
+            else:
+                rate = Decimal("0.03") # Fallback
+        except Exception:
+            rate = Decimal("0.03") # Fallback
+
     base = max(operation_price, cadastral_value)
     isai = base * rate
     # Standard rounding to 2 decimals for currency
