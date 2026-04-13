@@ -9,3 +9,6 @@ firebase-admin
 pytest
 httpx
 python-multipart
+pdf2image
+Pillow
+pydantic>=2.0.0

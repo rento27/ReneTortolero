@@ -8,6 +8,8 @@ try:
 except ImportError:
     notariospublicos10 = None
 
+from .fiscal_engine import validate_copropiedad
+
 def split_name(full_name: str, apellido_paterno: str = None, apellido_materno: str = None) -> Tuple[str, str, str]:
     """
     Returns a 3-tuple (nombre, apellido_paterno, apellido_materno).
@@ -48,7 +50,7 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
 
     # Try parsing the date strictly to ensure it's a valid calendar date
     try:
-        datetime.strptime(fecha_inst, "%Y-%m-%d")
+        fecha_inst_date = datetime.strptime(fecha_inst, "%Y-%m-%d").date()
     except ValueError as e:
         raise ValueError(f"Invalid date for fecha_inst_notarial: {e}")
 
@@ -60,6 +62,7 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
                 tipo_inmueble=inmueble.tipo_inmueble,
                 calle=inmueble.calle,
                 estado=inmueble.estado,
+                municipio=inmueble.municipio,
                 pais=inmueble.pais,
                 codigo_postal=inmueble.codigo_postal
             )
@@ -68,9 +71,13 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
     # Process Adquirientes
     adquiriente_cop_sc_list = []
     un_adquiriente = None
-    adquiriente_sum_percentages = Decimal("0.0")
+    adquiriente_percentages = []
+    copro_soc_conyugal_e_adquiriente = 'No'
 
     for adq in complemento_model.datos_adquirientes:
+        if adq.copro_soc_conyugal_e == 'Si':
+            copro_soc_conyugal_e_adquiriente = 'Si'
+
         nombre, paterno, materno = split_name(adq.nombre, adq.apellido_paterno, adq.apellido_materno)
         if adq.copro_soc_conyugal_e == 'Si':
             # Create DatosAdquirienteCopSC object
@@ -85,7 +92,7 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
                 )
             )
             if adq.porcentaje is not None:
-                adquiriente_sum_percentages += Decimal(str(adq.porcentaje))
+                adquiriente_percentages.append(Decimal(str(adq.porcentaje)))
         else:
             un_adquiriente = notariospublicos10.DatosUnAdquiriente(
                 nombre=nombre,
@@ -95,31 +102,37 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
                 curp=adq.curp
             )
 
-    if adquiriente_cop_sc_list and adquiriente_sum_percentages != Decimal("100.00"):
-        raise ValueError(f"Sum of adquiriente coproperty percentages must be exactly 100.00%, got {adquiriente_sum_percentages:.2f}%")
+    if adquiriente_cop_sc_list:
+        validate_copropiedad(adquiriente_percentages)
 
     if adquiriente_cop_sc_list:
         datos_adquiriente = notariospublicos10.DatosAdquiriente(
+            copro_soc_conyugal_e=copro_soc_conyugal_e_adquiriente,
             datos_adquirientes_cop_sc=adquiriente_cop_sc_list
         )
     else:
         datos_adquiriente = notariospublicos10.DatosAdquiriente(
+            copro_soc_conyugal_e=copro_soc_conyugal_e_adquiriente,
             datos_un_adquiriente=un_adquiriente
         )
 
     # Process Enajenantes
     enajenante_cop_sc_list = []
     un_enajenante = None
-    enajenante_sum_percentages = Decimal("0.0")
+    enajenante_percentages = []
+    copro_soc_conyugal_e_enajenante = 'No'
 
     for ena in complemento_model.datos_enajenantes:
         if not ena.curp:
             raise ValueError("CURP is mandatory for DatosEnajenante")
 
+        if ena.copro_soc_conyugal_e == 'Si':
+            copro_soc_conyugal_e_enajenante = 'Si'
+
         nombre, paterno, materno = split_name(ena.nombre, ena.apellido_paterno, ena.apellido_materno)
         if ena.copro_soc_conyugal_e == 'Si':
             enajenante_cop_sc_list.append(
-                notariospublicos10.DatosEnajenantesCopSC(
+                notariospublicos10.DatosEnajenanteCopSC(
                     nombre=nombre,
                     apellido_paterno=paterno,
                     apellido_materno=materno,
@@ -129,7 +142,7 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
                 )
             )
             if ena.porcentaje is not None:
-                enajenante_sum_percentages += Decimal(str(ena.porcentaje))
+                enajenante_percentages.append(Decimal(str(ena.porcentaje)))
         else:
             un_enajenante = notariospublicos10.DatosUnEnajenante(
                 nombre=nombre,
@@ -139,15 +152,17 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
                 curp=ena.curp
             )
 
-    if enajenante_cop_sc_list and enajenante_sum_percentages != Decimal("100.00"):
-        raise ValueError(f"Sum of enajenante coproperty percentages must be exactly 100.00%, got {enajenante_sum_percentages:.2f}%")
+    if enajenante_cop_sc_list:
+        validate_copropiedad(enajenante_percentages)
 
     if enajenante_cop_sc_list:
         datos_enajenante = notariospublicos10.DatosEnajenante(
+            copro_soc_conyugal_e=copro_soc_conyugal_e_enajenante,
             datos_enajenantes_cop_sc=enajenante_cop_sc_list
         )
     else:
         datos_enajenante = notariospublicos10.DatosEnajenante(
+            copro_soc_conyugal_e=copro_soc_conyugal_e_enajenante,
             datos_un_enajenante=un_enajenante
         )
 
@@ -160,7 +175,7 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
         desc_inmuebles=desc_inmuebles,
         datos_operacion=notariospublicos10.DatosOperacion(
             num_instrumento_notarial=1,
-            fecha_inst_notarial=fecha_inst,
+            fecha_inst_notarial=fecha_inst_date,
             monto_operacion=Decimal('0.00'),
             subtotal=Decimal('0.00'),
             iva=Decimal('0.00')

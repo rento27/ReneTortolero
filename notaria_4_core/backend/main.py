@@ -37,11 +37,12 @@ def create_cfdi(request: InvoiceRequest):
     # 3. Generate XML
     try:
         xml_bytes = generate_signed_xml(data)
+        import base64
         # In a real scenario, we might upload this to storage and return a URL
         # For now, return the stub content
         return {
             "status": "success",
-            "xml_base64": xml_bytes.decode('utf-8'), # Stub returns simple string bytes
+            "xml_base64": base64.b64encode(xml_bytes).decode('utf-8'),
             "retentions_calculated": retentions
         }
     except ValueError as ve:
