@@ -1,11 +1,11 @@
 import os
 import pytest
+from unittest.mock import patch, MagicMock
 from decimal import Decimal
 from notaria_4_core.backend.lib.xml_generator import generate_signed_xml
 
-def test_generate_xml():
-    os.environ["MOCK_SIGNER"] = "1"
-    data = {
+def get_test_data():
+    return {
         'receptor': {
             'rfc': 'ABC123456T12',
             'nombre': 'EMPRESA SA DE CV',
@@ -27,5 +27,23 @@ def test_generate_xml():
         ]
     }
 
+@patch("notaria_4_core.backend.lib.xml_generator.load_signer_from_secret_manager")
+@patch("satcfdi.create.cfd.cfdi40.Comprobante.sign")
+def test_generate_xml_success(mock_sign, mock_load_signer):
+    mock_load_signer.return_value = MagicMock()
+    mock_sign.return_value = None
+
+    data = get_test_data()
     xml = generate_signed_xml(data)
     assert xml is not None
+    mock_load_signer.assert_called_once()
+    mock_sign.assert_called_once()
+
+@patch("notaria_4_core.backend.lib.xml_generator.load_signer_from_secret_manager")
+def test_generate_xml_missing_signer(mock_load_signer):
+    mock_load_signer.return_value = None
+
+    data = get_test_data()
+    with pytest.raises(ValueError, match="Signer could not be loaded from Secret Manager."):
+        generate_signed_xml(data)
+    mock_load_signer.assert_called_once()
