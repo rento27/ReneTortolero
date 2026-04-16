@@ -21,9 +21,9 @@ except ImportError:
 try:
     import spacy
     try:
-        nlp = spacy.load("es_core_news_sm")
+        nlp = spacy.load("es_core_news_lg")
     except Exception as e:
-        logger.warning(f"spaCy model 'es_core_news_sm' not found. NLP features disabled. {e}")
+        logger.warning(f"spaCy model 'es_core_news_lg' not found. NLP features disabled. {e}")
         nlp = None
 except ImportError:
     spacy = None
@@ -81,6 +81,11 @@ def extract_structured_data(text: str) -> dict:
     # Matches Persona Física (4 letters) and Persona Moral (3 letters) followed by 6 digits and 3 alphanumeric
     rfc_matches = re.findall(r"[A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3}", text)
     data["rfcs"] = list(set(rfc_matches))  # remove duplicates
+
+    data["vendedores"] = []
+    data["adquirientes"] = []
+    data["inmuebles"] = []
+    data["montos"] = []
 
     # Stub for NLP
     if nlp:
