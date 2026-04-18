@@ -1,5 +1,6 @@
 from decimal import Decimal
 import pytest
+from unittest.mock import patch, MagicMock
 from notaria_4_core.backend.lib.fiscal_engine import sanitize_name, validate_copropiedad, calculate_retentions, calculate_isai_manzanillo, validate_postal_code
 
 def test_sanitize_name():
@@ -42,14 +43,35 @@ def test_calculate_retentions_fisica():
     assert ret["is_moral"] is False
     assert ret["isr"] == Decimal("0.00")
 
-def test_isai_manzanillo():
+@patch('notaria_4_core.backend.lib.fiscal_engine.remote_config.get_server_template')
+def test_isai_manzanillo(mock_get_template):
+    import notaria_4_core.backend.lib.fiscal_engine as fiscal_engine
+    # Clear cache before test
+    fiscal_engine._ISAI_RATE_CACHE = None
+
+    # Mocking firebase remote config setup
+    mock_template = MagicMock()
+    mock_param = MagicMock()
+    mock_param.default_value.value = "0.03"
+    mock_template.parameters.get.return_value = mock_param
+    mock_get_template.return_value = mock_template
+    # Avoid warnings for mock methods that may be async
+    mock_get_template.is_coroutine_function = False
+
     price = Decimal("1000000.00")
     cadastral = Decimal("500000.00")
     # Max is 1M. Rate 0.03 -> 30,000
     assert calculate_isai_manzanillo(price, cadastral) == Decimal("30000.00")
 
-    # Cadastral higher
+    # Assert get_server_template was called once (cached for next call)
+    mock_get_template.assert_called_once()
+
+    # Cadastral higher (should hit cache, call count remains 1)
     assert calculate_isai_manzanillo(price, Decimal("2000000.00")) == Decimal("60000.00")
+    mock_get_template.assert_called_once()
+
+    # Test with custom rate explicitely passed
+    assert calculate_isai_manzanillo(price, cadastral, rate=Decimal("0.05")) == Decimal("50000.00")
 
 def test_validate_postal_code():
     # Known CP
