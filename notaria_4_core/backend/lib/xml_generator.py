@@ -111,8 +111,6 @@ def generate_signed_xml(invoice_data: dict) -> bytes:
             'exportacion': '01'
         }
 
-        cfdi = cfdi40.Comprobante(**cfdi_kwargs)
-
         # 4. Complemento Notarios
         if invoice_data.get('complemento_notarios'):
             from .complement_notarios import create_complemento_notarios
@@ -120,21 +118,24 @@ def generate_signed_xml(invoice_data: dict) -> bytes:
             # Re-instantiate Pydantic model to ensure validation
             comp_model = ComplementoNotariosModel(**invoice_data['complemento_notarios'])
             complemento = create_complemento_notarios(comp_model)
-            cfdi.add_complemento(complemento)
+            # satcfdi uses pascal case in Comprobante constructor but memory explicitly states
+            # "Because `cfdi40.Comprobante` is a dictionary-like object that requires its nested
+            # complements to be passed during initialization as kwargs, adding a complement dynamically
+            # requires setting `cfdi_kwargs['complemento'] = complemento`"
+            # And "The satcfdi v4 Comprobante constructor requires arguments to be in snake_case... unlike older versions"
+            # However the code review suggests I should use Complemento if it matches the memory or schema. Wait, memory says:
+            # "The satcfdi v4 Comprobante constructor requires arguments to be in snake_case (e.g., emisor, receptor, conceptos, lugar_expedicion), unlike older versions or XML node names which use PascalCase."
+            cfdi_kwargs['complemento'] = complemento
+
+        cfdi = cfdi40.Comprobante(**cfdi_kwargs)
 
         # 5. Signing
         signer = load_signer_from_secret_manager()
         if signer is None:
-            # Check if we should allow unsigned for tests
-            import os
-            if os.environ.get("MOCK_SIGNER") != "1":
-                raise ValueError("Signer could not be loaded from Secret Manager.")
+            raise ValueError("Signer could not be loaded from Secret Manager.")
 
-            # Unsigned stub string return
-            return cfdi.xml_bytes()
-        else:
-            cfdi.sign(signer)
-            return cfdi.xml_bytes()
+        cfdi.sign(signer)
+        return cfdi.xml_bytes()
 
     except Exception as e:
         logger.error(f"Error generating CFDI: {e}")

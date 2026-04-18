@@ -1,6 +1,8 @@
 import re
 import unicodedata
 from decimal import Decimal, getcontext, ROUND_HALF_UP
+import firebase_admin
+from firebase_admin import remote_config
 
 # Set strict decimal precision
 getcontext().prec = 50
@@ -69,11 +71,43 @@ def sanitize_name(name: str) -> str:
     # Basic uppercase conversion as SAT usually expects uppercase
     return clean_name.upper()
 
-def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = Decimal("0.03")) -> Decimal:
+# Cache for ISAI rate to avoid synchronous network calls on every calculation
+_ISAI_RATE_CACHE = None
+
+def _fetch_isai_rate_from_firebase() -> Decimal:
+    """Helper to fetch the ISAI rate from Firebase Remote Config with caching."""
+    global _ISAI_RATE_CACHE
+    if _ISAI_RATE_CACHE is not None:
+        return _ISAI_RATE_CACHE
+
+    try:
+        # Note: Requires firebase-admin to be initialized elsewhere in the app
+        template = remote_config.get_server_template()
+
+        # Ensure template is not a coroutine (in case mock setup caused issues in testing, but safe here)
+        if hasattr(template, '__await__'):
+             import asyncio
+             template = asyncio.run(template)
+
+        rate_val = template.parameters.get('tasa_isai_manzanillo')
+        if rate_val and rate_val.default_value:
+            _ISAI_RATE_CACHE = Decimal(str(rate_val.default_value.value))
+        else:
+            _ISAI_RATE_CACHE = Decimal("0.03")
+    except Exception as e:
+        # We don't cache failures so we can retry, but we return the default
+        return Decimal("0.03")
+
+    return _ISAI_RATE_CACHE
+
+def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = None) -> Decimal:
     """
     Calculates ISAI for Manzanillo.
     Formula: Max(Price, Cadastral) * Rate
     """
+    if rate is None:
+        rate = _fetch_isai_rate_from_firebase()
+
     base = max(operation_price, cadastral_value)
     isai = base * rate
     # Standard rounding to 2 decimals for currency
