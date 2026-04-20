@@ -1,0 +1,35 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper function to check admin role
+    function isAdmin() {
+      return request.auth.token.admin == true;
+    }
+
+    // Clients Collection
+    match /clientes/{clienteId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Expedientes (Deeds) Collection
+    match /expedientes/{expedienteId} {
+      // Allow read for authenticated staff
+      allow read: if request.auth != null;
+
+      // Allow create/update only if status is NOT 'Timbrado'
+      // This is the "Digital Lock" mentioned in section 6.2
+      allow create: if request.auth != null;
+      allow update: if (resource.data.status != 'Timbrado' || isAdmin())
+                    && request.auth != null;
+    }
+
+    // Invoices Collection (Immutable once created basically)
+    match /facturas/{facturaId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      // No updates allowed to invoices usually, or strict rules
+      allow update: if false;
+    }
+  }
+}
