@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+satcfdi
+spacy
+google-cloud-secret-manager
+google-cloud-firestore
+python-multipart
+requests
+pymupdf
+pytesseract
