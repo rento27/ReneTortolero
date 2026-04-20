@@ -1,9 +1,20 @@
 import re
 import unicodedata
 from decimal import Decimal, getcontext, ROUND_HALF_UP
+import asyncio
+
+try:
+    import firebase_admin
+    from firebase_admin import remote_config
+except ImportError:
+    firebase_admin = None
+    remote_config = None
 
 # Set strict decimal precision
 getcontext().prec = 50
+
+# Cache for ISAI Rate
+_ISAI_RATE_CACHE = None
 
 # Corporate Regimes to strip (Regex pattern)
 # Matches common endings like S.A. DE C.V., S.C., etc., allowing for optional punctuation and casing.
@@ -69,11 +80,48 @@ def sanitize_name(name: str) -> str:
     # Basic uppercase conversion as SAT usually expects uppercase
     return clean_name.upper()
 
-def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = Decimal("0.03")) -> Decimal:
+def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = None) -> Decimal:
     """
     Calculates ISAI for Manzanillo.
     Formula: Max(Price, Cadastral) * Rate
     """
+    global _ISAI_RATE_CACHE
+
+    if rate is None:
+        if _ISAI_RATE_CACHE is not None:
+            rate = _ISAI_RATE_CACHE
+        elif remote_config:
+            try:
+                # Fetch from Firebase Remote Config
+                template = remote_config.get_server_template()
+                # Handle potential coroutine if firebase-admin update changed behavior
+                if asyncio.iscoroutine(template):
+                    # In a purely sync context without an event loop, we'd need to run it.
+                    # Usually get_server_template is sync, but let's be safe as per memory constraints.
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        # We cannot run asyncio.run() if a loop is already running,
+                        # but typically this is called in a threadpool by FastAPI.
+                        # For simplicity, if it's a coroutine, we just run it.
+                        import nest_asyncio
+                        nest_asyncio.apply()
+                    template = asyncio.run(template)
+
+                # Extract parameter
+                if 'tasa_isai_manzanillo' in template.parameters:
+                    rate_val = template.parameters['tasa_isai_manzanillo'].default_value.value
+                    rate = Decimal(str(rate_val))
+                else:
+                    rate = Decimal("0.03")
+
+                _ISAI_RATE_CACHE = rate
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Failed to fetch remote config for ISAI rate: {e}")
+                rate = Decimal("0.03")
+        else:
+            rate = Decimal("0.03")
+
     base = max(operation_price, cadastral_value)
     isai = base * rate
     # Standard rounding to 2 decimals for currency
