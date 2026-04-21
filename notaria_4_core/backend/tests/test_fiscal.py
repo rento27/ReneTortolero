@@ -1,5 +1,7 @@
 from decimal import Decimal
 import pytest
+from unittest.mock import patch, MagicMock
+import notaria_4_core.backend.lib.fiscal_engine as fiscal_engine
 from notaria_4_core.backend.lib.fiscal_engine import sanitize_name, validate_copropiedad, calculate_retentions, calculate_isai_manzanillo, validate_postal_code
 
 def test_sanitize_name():
@@ -43,13 +45,21 @@ def test_calculate_retentions_fisica():
     assert ret["isr"] == Decimal("0.00")
 
 def test_isai_manzanillo():
-    price = Decimal("1000000.00")
-    cadastral = Decimal("500000.00")
-    # Max is 1M. Rate 0.03 -> 30,000
-    assert calculate_isai_manzanillo(price, cadastral) == Decimal("30000.00")
+    fiscal_engine._ISAI_RATE_CACHE = None
+    with patch('notaria_4_core.backend.lib.fiscal_engine.remote_config.get_server_template', new_callable=MagicMock) as mock_get_template:
+        mock_template = MagicMock()
+        mock_val = MagicMock()
+        mock_val.default_value.value = "0.03"
+        mock_template.parameters.get.return_value = mock_val
+        mock_get_template.return_value = mock_template
 
-    # Cadastral higher
-    assert calculate_isai_manzanillo(price, Decimal("2000000.00")) == Decimal("60000.00")
+        price = Decimal("1000000.00")
+        cadastral = Decimal("500000.00")
+        # Max is 1M. Rate 0.03 -> 30,000
+        assert calculate_isai_manzanillo(price, cadastral) == Decimal("30000.00")
+
+        # Cadastral higher
+        assert calculate_isai_manzanillo(price, Decimal("2000000.00")) == Decimal("60000.00")
 
 def test_validate_postal_code():
     # Known CP
