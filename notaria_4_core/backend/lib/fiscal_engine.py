@@ -1,6 +1,15 @@
 import re
 import unicodedata
+import asyncio
+import logging
 from decimal import Decimal, getcontext, ROUND_HALF_UP
+
+try:
+    from firebase_admin import remote_config
+except ImportError:
+    remote_config = None
+
+logger = logging.getLogger(__name__)
 
 # Set strict decimal precision
 getcontext().prec = 50
@@ -69,11 +78,42 @@ def sanitize_name(name: str) -> str:
     # Basic uppercase conversion as SAT usually expects uppercase
     return clean_name.upper()
 
-def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = Decimal("0.03")) -> Decimal:
+_ISAI_RATE_CACHE = None
+
+def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = None) -> Decimal:
     """
     Calculates ISAI for Manzanillo.
     Formula: Max(Price, Cadastral) * Rate
     """
+    global _ISAI_RATE_CACHE
+
+    if rate is None:
+        if _ISAI_RATE_CACHE is not None:
+            rate = _ISAI_RATE_CACHE
+        else:
+            fetched_rate = None
+            if remote_config:
+                try:
+                    template = remote_config.get_server_template()
+                    if asyncio.iscoroutine(template):
+                        template = asyncio.run(template)
+
+                    if template and 'tasa_isai_manzanillo' in template.parameters:
+                        val = template.parameters['tasa_isai_manzanillo'].default_value
+                        # Depending on the type of default_value, it might be a string or property
+                        # Usually it has a value property or is a string
+                        val_str = getattr(val, 'value', str(val))
+                        fetched_rate = Decimal(val_str)
+                except Exception as e:
+                    logger.warning(f"Failed to fetch tasa_isai_manzanillo from remote config: {e}")
+
+            if fetched_rate is not None:
+                rate = fetched_rate
+            else:
+                rate = Decimal("0.03")
+
+            _ISAI_RATE_CACHE = rate
+
     base = max(operation_price, cadastral_value)
     isai = base * rate
     # Standard rounding to 2 decimals for currency
