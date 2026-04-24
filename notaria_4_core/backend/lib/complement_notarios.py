@@ -60,6 +60,7 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
                 tipo_inmueble=inmueble.tipo_inmueble,
                 calle=inmueble.calle,
                 estado=inmueble.estado,
+                municipio=inmueble.municipio,
                 pais=inmueble.pais,
                 codigo_postal=inmueble.codigo_postal
             )

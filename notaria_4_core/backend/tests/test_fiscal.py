@@ -1,6 +1,8 @@
 from decimal import Decimal
 import pytest
+from unittest.mock import patch, MagicMock
 from notaria_4_core.backend.lib.fiscal_engine import sanitize_name, validate_copropiedad, calculate_retentions, calculate_isai_manzanillo, validate_postal_code
+import notaria_4_core.backend.lib.fiscal_engine as fiscal_engine
 
 def test_sanitize_name():
     # Test removal of S.A. DE C.V.
@@ -45,11 +47,35 @@ def test_calculate_retentions_fisica():
 def test_isai_manzanillo():
     price = Decimal("1000000.00")
     cadastral = Decimal("500000.00")
-    # Max is 1M. Rate 0.03 -> 30,000
+    fiscal_engine._ISAI_RATE_CACHE = None
+
+    # Max is 1M. Default Rate 0.03 -> 30,000
     assert calculate_isai_manzanillo(price, cadastral) == Decimal("30000.00")
 
     # Cadastral higher
+    fiscal_engine._ISAI_RATE_CACHE = None
     assert calculate_isai_manzanillo(price, Decimal("2000000.00")) == Decimal("60000.00")
+
+@patch('notaria_4_core.backend.lib.fiscal_engine.remote_config')
+def test_isai_manzanillo_remote_config(mock_remote_config):
+    fiscal_engine._ISAI_RATE_CACHE = None
+
+    mock_template = MagicMock()
+    mock_param = MagicMock()
+    mock_param.default_value.value = "0.04"
+    mock_template.parameters = {'tasa_isai_manzanillo': mock_param}
+    mock_remote_config.get_server_template.return_value = mock_template
+
+    price = Decimal("1000000.00")
+    cadastral = Decimal("500000.00")
+
+    # Max is 1M. Fetched Rate 0.04 -> 40,000
+    assert calculate_isai_manzanillo(price, cadastral) == Decimal("40000.00")
+
+    # Check cache works
+    mock_remote_config.get_server_template.reset_mock()
+    assert calculate_isai_manzanillo(price, cadastral) == Decimal("40000.00")
+    mock_remote_config.get_server_template.assert_not_called()
 
 def test_validate_postal_code():
     # Known CP
