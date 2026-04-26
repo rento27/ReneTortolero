@@ -43,6 +43,7 @@ class DatosEnajenante(BaseModel):
 class DescInmueble(BaseModel):
     tipo_inmueble: str
     calle: str
+    municipio: str
     estado: str
     pais: str = "MEX"
     codigo_postal: str
