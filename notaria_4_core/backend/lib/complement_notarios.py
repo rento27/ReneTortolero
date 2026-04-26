@@ -59,6 +59,7 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
             notariospublicos10.DescInmueble(
                 tipo_inmueble=inmueble.tipo_inmueble,
                 calle=inmueble.calle,
+                municipio=inmueble.municipio,
                 estado=inmueble.estado,
                 pais=inmueble.pais,
                 codigo_postal=inmueble.codigo_postal
@@ -98,12 +99,18 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
     if adquiriente_cop_sc_list and adquiriente_sum_percentages != Decimal("100.00"):
         raise ValueError(f"Sum of adquiriente coproperty percentages must be exactly 100.00%, got {adquiriente_sum_percentages:.2f}%")
 
+    # Determine the CoproSocConyugalE value for Adquiriente
+    # The rule requires 'Si' if there is coproperty, else 'No'
+    adq_copro = 'Si' if adquiriente_cop_sc_list else 'No'
+
     if adquiriente_cop_sc_list:
         datos_adquiriente = notariospublicos10.DatosAdquiriente(
+            copro_soc_conyugal_e=adq_copro,
             datos_adquirientes_cop_sc=adquiriente_cop_sc_list
         )
     else:
         datos_adquiriente = notariospublicos10.DatosAdquiriente(
+            copro_soc_conyugal_e=adq_copro,
             datos_un_adquiriente=un_adquiriente
         )
 
@@ -142,12 +149,16 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
     if enajenante_cop_sc_list and enajenante_sum_percentages != Decimal("100.00"):
         raise ValueError(f"Sum of enajenante coproperty percentages must be exactly 100.00%, got {enajenante_sum_percentages:.2f}%")
 
+    ena_copro = 'Si' if enajenante_cop_sc_list else 'No'
+
     if enajenante_cop_sc_list:
         datos_enajenante = notariospublicos10.DatosEnajenante(
+            copro_soc_conyugal_e=ena_copro,
             datos_enajenantes_cop_sc=enajenante_cop_sc_list
         )
     else:
         datos_enajenante = notariospublicos10.DatosEnajenante(
+            copro_soc_conyugal_e=ena_copro,
             datos_un_enajenante=un_enajenante
         )
 
