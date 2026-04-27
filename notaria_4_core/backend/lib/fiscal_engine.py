@@ -1,5 +1,7 @@
 import re
 import unicodedata
+import asyncio
+from firebase_admin import remote_config
 from decimal import Decimal, getcontext, ROUND_HALF_UP
 
 # Set strict decimal precision
@@ -69,11 +71,65 @@ def sanitize_name(name: str) -> str:
     # Basic uppercase conversion as SAT usually expects uppercase
     return clean_name.upper()
 
-def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = Decimal("0.03")) -> Decimal:
+_ISAI_RATE_CACHE = None
+
+def get_remote_config_sync() -> remote_config.ServerTemplate:
+    """Helper to safely fetch Remote Config in a sync context avoiding event loop issues."""
+    template = remote_config.init_server_template()
+    try:
+        # Check if an event loop is already running
+        asyncio.get_running_loop()
+        import threading
+        result = [None]
+        err = [None]
+        def run_in_thread():
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(template.load())
+                loop.close()
+            except Exception as e:
+                err[0] = e
+        t = threading.Thread(target=run_in_thread)
+        t.start()
+        t.join()
+        if err[0]:
+            raise err[0]
+        return template
+    except RuntimeError:
+        # No event loop in this thread
+        asyncio.run(template.load())
+        return template
+
+def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = None) -> Decimal:
     """
     Calculates ISAI for Manzanillo.
     Formula: Max(Price, Cadastral) * Rate
     """
+    global _ISAI_RATE_CACHE
+
+    if rate is None:
+        if _ISAI_RATE_CACHE is None:
+            try:
+                template = get_remote_config_sync()
+                config = template.evaluate()
+                fetched_rate_str = config.get_string("tasa_isai_manzanillo")
+
+                # Check if it was actually retrieved from remote config (not static default)
+                # If static default empty string, fallback
+                if fetched_rate_str:
+                    _ISAI_RATE_CACHE = Decimal(fetched_rate_str)
+                else:
+                    raise ValueError("Not found")
+            except Exception as e:
+                # Fallback on failure, BUT do not cache it!
+                # This way, subsequent calls will retry fetching.
+                fallback = Decimal("0.03")
+                base = max(operation_price, cadastral_value)
+                return (base * fallback).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+        rate = _ISAI_RATE_CACHE
+
     base = max(operation_price, cadastral_value)
     isai = base * rate
     # Standard rounding to 2 decimals for currency
