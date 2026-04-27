@@ -1,5 +1,7 @@
 from decimal import Decimal
 import pytest
+from unittest.mock import patch, MagicMock
+from notaria_4_core.backend.lib import fiscal_engine
 from notaria_4_core.backend.lib.fiscal_engine import sanitize_name, validate_copropiedad, calculate_retentions, calculate_isai_manzanillo, validate_postal_code
 
 def test_sanitize_name():
@@ -42,14 +44,32 @@ def test_calculate_retentions_fisica():
     assert ret["is_moral"] is False
     assert ret["isr"] == Decimal("0.00")
 
-def test_isai_manzanillo():
+@patch("notaria_4_core.backend.lib.fiscal_engine.get_remote_config_sync")
+def test_isai_manzanillo(mock_get_remote_config_sync):
+    # Setup mock remote config
+    mock_template = MagicMock()
+    mock_config = MagicMock()
+    mock_config.get_string.return_value = "0.04"
+    mock_template.evaluate.return_value = mock_config
+    mock_get_remote_config_sync.return_value = mock_template
+
+    # Clear cache before test
+    fiscal_engine._ISAI_RATE_CACHE = None
+
     price = Decimal("1000000.00")
     cadastral = Decimal("500000.00")
-    # Max is 1M. Rate 0.03 -> 30,000
-    assert calculate_isai_manzanillo(price, cadastral) == Decimal("30000.00")
 
-    # Cadastral higher
-    assert calculate_isai_manzanillo(price, Decimal("2000000.00")) == Decimal("60000.00")
+    # Max is 1M. Rate 0.04 -> 40,000
+    assert calculate_isai_manzanillo(price, cadastral) == Decimal("40000.00")
+
+    # Test cache is used (change mock to something else, should still return 0.04 rate)
+    mock_config.get_string.return_value = "0.05"
+    assert calculate_isai_manzanillo(price, Decimal("2000000.00")) == Decimal("80000.00") # 2M * 0.04
+
+    # Test fallback if remote config fails
+    fiscal_engine._ISAI_RATE_CACHE = None
+    mock_get_remote_config_sync.side_effect = Exception("Firebase error")
+    assert calculate_isai_manzanillo(price, cadastral) == Decimal("30000.00") # default rate 0.03
 
 def test_validate_postal_code():
     # Known CP
