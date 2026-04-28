@@ -1,6 +1,10 @@
 import re
 import unicodedata
 from decimal import Decimal, getcontext, ROUND_HALF_UP
+import firebase_admin
+from firebase_admin import remote_config
+import threading
+import asyncio
 
 # Set strict decimal precision
 getcontext().prec = 50
@@ -19,6 +23,26 @@ ISR_RETENTION_RATE = Decimal("0.10")
 # Or calculated as (Subtotal * 0.16) * (2/3)
 # The prompt says "Matemáticamente, esto equivale a una tasa del 10.6667%".
 IVA_RETENTION_RATE_DIRECT = Decimal("0.106667")
+
+_ISAI_RATE_CACHE = None
+
+def get_remote_config_sync() -> str:
+    """
+    Custom sync helper to safely fetch the async remote config template
+    in FastAPI's threadpool, avoiding event loop conflicts.
+    """
+    # Simple sync call
+    try:
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app()
+        template = remote_config.get_server_template()
+        rate_val = template.evaluate().get_string("tasa_isai_manzanillo")
+        if not rate_val:
+            return "0.03"
+        return rate_val
+    except Exception:
+        # fallback to default
+        return "0.03"
 
 # Stub for Postal Code Catalog (Manzanillo samples)
 # In production, this would be loaded from Firestore/Cache
@@ -69,11 +93,19 @@ def sanitize_name(name: str) -> str:
     # Basic uppercase conversion as SAT usually expects uppercase
     return clean_name.upper()
 
-def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = Decimal("0.03")) -> Decimal:
+def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = None) -> Decimal:
     """
     Calculates ISAI for Manzanillo.
     Formula: Max(Price, Cadastral) * Rate
+    Defaults to fetching tasa_isai_manzanillo from Firebase Remote Config if rate is omitted.
     """
+    global _ISAI_RATE_CACHE
+    if rate is None:
+        if _ISAI_RATE_CACHE is None:
+            rate_str = get_remote_config_sync()
+            _ISAI_RATE_CACHE = Decimal(rate_str)
+        rate = _ISAI_RATE_CACHE
+
     base = max(operation_price, cadastral_value)
     isai = base * rate
     # Standard rounding to 2 decimals for currency

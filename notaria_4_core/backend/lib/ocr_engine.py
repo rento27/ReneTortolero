@@ -69,7 +69,11 @@ def extract_structured_data(text: str) -> dict:
     """
     data = {
         "escritura": None,
-        "rfcs": []
+        "rfcs": [],
+        "vendedores": [],
+        "adquirientes": [],
+        "inmuebles": [],
+        "montos": []
     }
 
     # Extract Escritura using deterministic regex
