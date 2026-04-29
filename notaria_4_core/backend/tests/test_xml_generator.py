@@ -2,9 +2,18 @@ import os
 import pytest
 from decimal import Decimal
 from notaria_4_core.backend.lib.xml_generator import generate_signed_xml
+from unittest.mock import patch, MagicMock
 
-def test_generate_xml():
-    os.environ["MOCK_SIGNER"] = "1"
+@patch('notaria_4_core.backend.lib.xml_generator.load_signer_from_secret_manager')
+@patch('notaria_4_core.backend.lib.xml_generator.cfdi40.Comprobante')
+def test_generate_xml(mock_comprobante_class, mock_load_signer):
+    mock_signer = MagicMock()
+    mock_load_signer.return_value = mock_signer
+
+    mock_comprobante = MagicMock()
+    mock_comprobante.xml_bytes.return_value = b"<xml></xml>"
+    mock_comprobante_class.return_value = mock_comprobante
+
     data = {
         'receptor': {
             'rfc': 'ABC123456T12',
@@ -28,4 +37,5 @@ def test_generate_xml():
     }
 
     xml = generate_signed_xml(data)
-    assert xml is not None
+    assert xml == b"<xml></xml>"
+    mock_comprobante.sign.assert_called_once_with(mock_signer)
