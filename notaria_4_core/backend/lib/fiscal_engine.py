@@ -1,6 +1,17 @@
 import re
 import unicodedata
 from decimal import Decimal, getcontext, ROUND_HALF_UP
+import firebase_admin
+from firebase_admin import remote_config
+import concurrent.futures
+
+_ISAI_RATE_CACHE = None
+
+def get_remote_config_sync():
+    """Sync wrapper to safely fetch remote config using threadpool."""
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        return executor.submit(remote_config.get_remote_config).result()
+
 
 # Set strict decimal precision
 getcontext().prec = 50
@@ -69,11 +80,22 @@ def sanitize_name(name: str) -> str:
     # Basic uppercase conversion as SAT usually expects uppercase
     return clean_name.upper()
 
-def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = Decimal("0.03")) -> Decimal:
+def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = None) -> Decimal:
     """
     Calculates ISAI for Manzanillo.
     Formula: Max(Price, Cadastral) * Rate
     """
+    global _ISAI_RATE_CACHE
+    if rate is None:
+        if _ISAI_RATE_CACHE is None:
+            try:
+                template = get_remote_config_sync()
+                val = template.parameters.get('tasa_isai_manzanillo').default_value.value
+                _ISAI_RATE_CACHE = Decimal(str(val))
+            except Exception:
+                _ISAI_RATE_CACHE = Decimal("0.03")
+        rate = _ISAI_RATE_CACHE
+
     base = max(operation_price, cadastral_value)
     isai = base * rate
     # Standard rounding to 2 decimals for currency
