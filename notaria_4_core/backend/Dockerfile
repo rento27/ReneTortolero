@@ -23,5 +23,10 @@ COPY . .
 # Expose port (Cloud Run defaults to 8080)
 EXPOSE 8080
 
+# Cloud Run Requirements:
+# - Minimum Memory: 2GB RAM
+# - Timeout: 300 seconds
+# These settings should be configured in the Cloud Run deployment.
+
 # Command to run the application
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
