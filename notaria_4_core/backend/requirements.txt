@@ -9,3 +9,5 @@ firebase-admin
 pytest
 httpx
 python-multipart
+cachetools
+pdf2image
