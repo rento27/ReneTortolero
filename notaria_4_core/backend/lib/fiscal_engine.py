@@ -1,6 +1,9 @@
 import re
 import unicodedata
 from decimal import Decimal, getcontext, ROUND_HALF_UP
+import firebase_admin
+from firebase_admin import remote_config
+import concurrent.futures
 
 # Set strict decimal precision
 getcontext().prec = 50
@@ -15,10 +18,6 @@ REGIME_REGEX = re.compile(
 
 # Constants
 ISR_RETENTION_RATE = Decimal("0.10")
-# Two-thirds of IVA (16% * 2/3 = 10.6666...) approximated to 10.6667% for direct base calculation
-# Or calculated as (Subtotal * 0.16) * (2/3)
-# The prompt says "Matemáticamente, esto equivale a una tasa del 10.6667%".
-IVA_RETENTION_RATE_DIRECT = Decimal("0.106667")
 
 # Stub for Postal Code Catalog (Manzanillo samples)
 # In production, this would be loaded from Firestore/Cache
@@ -69,11 +68,36 @@ def sanitize_name(name: str) -> str:
     # Basic uppercase conversion as SAT usually expects uppercase
     return clean_name.upper()
 
-def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = Decimal("0.03")) -> Decimal:
+_ISAI_RATE_CACHE = None
+
+def get_remote_config_sync():
+    """
+    Fetches the Remote Config template synchronously using a ThreadPoolExecutor.
+    """
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        future = executor.submit(remote_config.get_remote_config)
+        return future.result()
+
+def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = None) -> Decimal:
     """
     Calculates ISAI for Manzanillo.
     Formula: Max(Price, Cadastral) * Rate
+    Fetches the rate from Firebase Remote Config if not provided.
     """
+    global _ISAI_RATE_CACHE
+    if rate is None:
+        if _ISAI_RATE_CACHE is not None:
+            rate = _ISAI_RATE_CACHE
+        else:
+            try:
+                template = get_remote_config_sync()
+                # Get the value, or default to 0.03 if not found
+                rate_str = template.parameters.get('tasa_isai_manzanillo').default_value.value
+                rate = Decimal(rate_str)
+            except Exception:
+                rate = Decimal("0.03")
+            _ISAI_RATE_CACHE = rate
+
     base = max(operation_price, cadastral_value)
     isai = base * rate
     # Standard rounding to 2 decimals for currency
@@ -98,11 +122,8 @@ def calculate_retentions(rfc_receptor: str, subtotal: Decimal, iva_rate: Decimal
         # ISR Retention: 10% of Subtotal
         retentions["isr"] = (subtotal * ISR_RETENTION_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
-        # IVA Retention: 2/3 of the IVA amount
-        # IVA Amount = Subtotal * iva_rate
-        # Ret = IVA Amount * (2/3)
-        iva_amount = subtotal * iva_rate
-        ret_iva = iva_amount * (Decimal("2") / Decimal("3"))
+        # IVA Retention explicitly calculated with 10.6667% rate.
+        ret_iva = subtotal * Decimal("0.106667")
         retentions["iva"] = ret_iva.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     return retentions
