@@ -1,6 +1,8 @@
 from decimal import Decimal
 import pytest
+from unittest.mock import patch, MagicMock
 from notaria_4_core.backend.lib.fiscal_engine import sanitize_name, validate_copropiedad, calculate_retentions, calculate_isai_manzanillo, validate_postal_code
+import notaria_4_core.backend.lib.fiscal_engine as fiscal_engine
 
 def test_sanitize_name():
     # Test removal of S.A. DE C.V.
@@ -45,11 +47,40 @@ def test_calculate_retentions_fisica():
 def test_isai_manzanillo():
     price = Decimal("1000000.00")
     cadastral = Decimal("500000.00")
-    # Max is 1M. Rate 0.03 -> 30,000
-    assert calculate_isai_manzanillo(price, cadastral) == Decimal("30000.00")
+
+    # Reset cache
+    fiscal_engine._ISAI_RATE_CACHE = None
+
+    # Max is 1M. Default (when no remote config sync override) fallback rate 0.03 -> 30,000
+    # Provide the rate manually
+    assert calculate_isai_manzanillo(price, cadastral, rate=Decimal("0.03")) == Decimal("30000.00")
 
     # Cadastral higher
-    assert calculate_isai_manzanillo(price, Decimal("2000000.00")) == Decimal("60000.00")
+    assert calculate_isai_manzanillo(price, Decimal("2000000.00"), rate=Decimal("0.03")) == Decimal("60000.00")
+
+@patch("notaria_4_core.backend.lib.fiscal_engine.get_remote_config_sync")
+def test_isai_manzanillo_remote_config(mock_get_remote_config_sync):
+    fiscal_engine._ISAI_RATE_CACHE = None
+
+    # Mock the template and its parameters
+    mock_template = MagicMock()
+    mock_param = MagicMock()
+    mock_param.default_value.value = "0.04"
+    mock_template.parameters = {"tasa_isai_manzanillo": mock_param}
+    mock_get_remote_config_sync.return_value = mock_template
+
+    price = Decimal("1000000.00")
+    cadastral = Decimal("500000.00")
+
+    # Max is 1M. Rate 0.04 -> 40,000
+    assert calculate_isai_manzanillo(price, cadastral) == Decimal("40000.00")
+
+    # Verify the mock was called
+    mock_get_remote_config_sync.assert_called_once()
+
+    # Test caching (mock shouldn't be called again)
+    assert calculate_isai_manzanillo(price, cadastral) == Decimal("40000.00")
+    assert mock_get_remote_config_sync.call_count == 1
 
 def test_validate_postal_code():
     # Known CP
