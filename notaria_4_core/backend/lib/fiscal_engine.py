@@ -1,6 +1,14 @@
 import re
 import unicodedata
+import time
 from decimal import Decimal, getcontext, ROUND_HALF_UP
+
+try:
+    import firebase_admin
+    from firebase_admin import remote_config
+except ImportError:
+    firebase_admin = None
+    remote_config = None
 
 # Set strict decimal precision
 getcontext().prec = 50
@@ -19,6 +27,10 @@ ISR_RETENTION_RATE = Decimal("0.10")
 # Or calculated as (Subtotal * 0.16) * (2/3)
 # The prompt says "Matemáticamente, esto equivale a una tasa del 10.6667%".
 IVA_RETENTION_RATE_DIRECT = Decimal("0.106667")
+
+_ISAI_RATE_CACHE = None
+_ISAI_RATE_CACHE_TIME = 0
+_ISAI_RATE_CACHE_TTL = 3600  # 1 hour
 
 # Stub for Postal Code Catalog (Manzanillo samples)
 # In production, this would be loaded from Firestore/Cache
@@ -69,11 +81,42 @@ def sanitize_name(name: str) -> str:
     # Basic uppercase conversion as SAT usually expects uppercase
     return clean_name.upper()
 
-def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = Decimal("0.03")) -> Decimal:
+def get_remote_config_sync() -> dict:
+    if remote_config is None:
+        return {}
+    if not firebase_admin._apps:
+        # Avoid initialize_app crashing if not configured, though typically it's configured in main
+        return {}
+    try:
+        template = remote_config.get_remote_config()
+        return template.parameters
+    except Exception:
+        return {}
+
+def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = None) -> Decimal:
     """
     Calculates ISAI for Manzanillo.
     Formula: Max(Price, Cadastral) * Rate
     """
+    global _ISAI_RATE_CACHE, _ISAI_RATE_CACHE_TIME
+
+    if rate is None:
+        current_time = time.time()
+        if _ISAI_RATE_CACHE is not None and (current_time - _ISAI_RATE_CACHE_TIME) < _ISAI_RATE_CACHE_TTL:
+            rate = _ISAI_RATE_CACHE
+        else:
+            params = get_remote_config_sync()
+            if "tasa_isai_manzanillo" in params:
+                try:
+                    val = params["tasa_isai_manzanillo"].default_value
+                    rate = Decimal(str(val))
+                    _ISAI_RATE_CACHE = rate
+                    _ISAI_RATE_CACHE_TIME = current_time
+                except Exception:
+                    rate = Decimal("0.03")
+            else:
+                rate = Decimal("0.03")
+
     base = max(operation_price, cadastral_value)
     isai = base * rate
     # Standard rounding to 2 decimals for currency
