@@ -1,5 +1,8 @@
 import re
 import unicodedata
+import time
+import firebase_admin
+from firebase_admin import remote_config
 from decimal import Decimal, getcontext, ROUND_HALF_UP
 
 # Set strict decimal precision
@@ -44,6 +47,14 @@ def validate_postal_code(cp: str, expected_state: str = None) -> bool:
 
     return True
 
+_ISAI_RATE_CACHE = None
+_ISAI_RATE_CACHE_TIME = 0
+_ISAI_RATE_CACHE_TTL = 3600
+
+def get_remote_config_sync() -> dict:
+    """Helper to fetch remote config synchronously"""
+    return remote_config.get_remote_config()
+
 def sanitize_name(name: str) -> str:
     """
     Removes corporate regimes from the name for CFDI 4.0 validation.
@@ -69,11 +80,25 @@ def sanitize_name(name: str) -> str:
     # Basic uppercase conversion as SAT usually expects uppercase
     return clean_name.upper()
 
-def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = Decimal("0.03")) -> Decimal:
+def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = None) -> Decimal:
     """
     Calculates ISAI for Manzanillo.
     Formula: Max(Price, Cadastral) * Rate
+    Defaults to fetching tasa_isai_manzanillo from Firebase Remote Config.
     """
+    global _ISAI_RATE_CACHE, _ISAI_RATE_CACHE_TIME
+    if rate is None:
+        current_time = time.time()
+        if _ISAI_RATE_CACHE is None or current_time - _ISAI_RATE_CACHE_TIME > _ISAI_RATE_CACHE_TTL:
+            try:
+                template = get_remote_config_sync()
+                rate_str = template.parameters.get("tasa_isai_manzanillo").default_value.value
+                _ISAI_RATE_CACHE = Decimal(rate_str)
+            except Exception:
+                _ISAI_RATE_CACHE = Decimal("0.03")  # fallback
+            _ISAI_RATE_CACHE_TIME = current_time
+        rate = _ISAI_RATE_CACHE
+
     base = max(operation_price, cadastral_value)
     isai = base * rate
     # Standard rounding to 2 decimals for currency

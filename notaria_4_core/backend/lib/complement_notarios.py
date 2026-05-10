@@ -42,13 +42,13 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
         raise ImportError("satcfdi library is required to generate the NotariosPublicos complement.")
 
     # Validate date
-    fecha_inst = complemento_model.fecha_inst_notarial
-    if not re.match(r"^\d{4}-\d{2}-\d{2}$", fecha_inst):
-        raise ValueError(f"fecha_inst_notarial must be in YYYY-MM-DD format, got '{fecha_inst}'")
+    fecha_inst_str = complemento_model.fecha_inst_notarial
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", fecha_inst_str):
+        raise ValueError(f"fecha_inst_notarial must be in YYYY-MM-DD format, got '{fecha_inst_str}'")
 
     # Try parsing the date strictly to ensure it's a valid calendar date
     try:
-        datetime.strptime(fecha_inst, "%Y-%m-%d")
+        fecha_inst = datetime.strptime(fecha_inst_str, "%Y-%m-%d").date()
     except ValueError as e:
         raise ValueError(f"Invalid date for fecha_inst_notarial: {e}")
 
@@ -59,6 +59,7 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
             notariospublicos10.DescInmueble(
                 tipo_inmueble=inmueble.tipo_inmueble,
                 calle=inmueble.calle,
+                municipio=inmueble.municipio,
                 estado=inmueble.estado,
                 pais=inmueble.pais,
                 codigo_postal=inmueble.codigo_postal
@@ -100,10 +101,12 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
 
     if adquiriente_cop_sc_list:
         datos_adquiriente = notariospublicos10.DatosAdquiriente(
+            copro_soc_conyugal_e="Si",
             datos_adquirientes_cop_sc=adquiriente_cop_sc_list
         )
     else:
         datos_adquiriente = notariospublicos10.DatosAdquiriente(
+            copro_soc_conyugal_e="No",
             datos_un_adquiriente=un_adquiriente
         )
 
@@ -144,10 +147,12 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
 
     if enajenante_cop_sc_list:
         datos_enajenante = notariospublicos10.DatosEnajenante(
+            copro_soc_conyugal_e="Si",
             datos_enajenantes_cop_sc=enajenante_cop_sc_list
         )
     else:
         datos_enajenante = notariospublicos10.DatosEnajenante(
+            copro_soc_conyugal_e="No",
             datos_un_enajenante=un_enajenante
         )
 
