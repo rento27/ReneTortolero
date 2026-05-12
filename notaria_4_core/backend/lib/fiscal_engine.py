@@ -1,6 +1,12 @@
 import re
+import time
 import unicodedata
 from decimal import Decimal, getcontext, ROUND_HALF_UP
+
+try:
+    from firebase_admin import remote_config
+except ImportError:
+    remote_config = None
 
 # Set strict decimal precision
 getcontext().prec = 50
@@ -44,6 +50,12 @@ def validate_postal_code(cp: str, expected_state: str = None) -> bool:
 
     return True
 
+_ISAI_RATE_CACHE = None
+_ISAI_RATE_CACHE_TTL = 3600
+
+def get_remote_config_sync():
+    return remote_config.get_remote_config()
+
 def sanitize_name(name: str) -> str:
     """
     Removes corporate regimes from the name for CFDI 4.0 validation.
@@ -69,11 +81,27 @@ def sanitize_name(name: str) -> str:
     # Basic uppercase conversion as SAT usually expects uppercase
     return clean_name.upper()
 
-def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = Decimal("0.03")) -> Decimal:
+def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = None) -> Decimal:
     """
     Calculates ISAI for Manzanillo.
     Formula: Max(Price, Cadastral) * Rate
     """
+    global _ISAI_RATE_CACHE
+    if rate is None:
+        current_time = time.time()
+        if _ISAI_RATE_CACHE is None or current_time - _ISAI_RATE_CACHE['timestamp'] > _ISAI_RATE_CACHE_TTL:
+            try:
+                template = get_remote_config_sync()
+                param = template.parameters.get('tasa_isai_manzanillo')
+                if param and param.default_value:
+                    val = param.default_value.value
+                    _ISAI_RATE_CACHE = {'value': Decimal(str(val)), 'timestamp': current_time}
+                else:
+                    _ISAI_RATE_CACHE = {'value': Decimal("0.03"), 'timestamp': current_time}
+            except Exception:
+                _ISAI_RATE_CACHE = {'value': Decimal("0.03"), 'timestamp': current_time}
+        rate = _ISAI_RATE_CACHE['value']
+
     base = max(operation_price, cadastral_value)
     isai = base * rate
     # Standard rounding to 2 decimals for currency
@@ -98,11 +126,8 @@ def calculate_retentions(rfc_receptor: str, subtotal: Decimal, iva_rate: Decimal
         # ISR Retention: 10% of Subtotal
         retentions["isr"] = (subtotal * ISR_RETENTION_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
-        # IVA Retention: 2/3 of the IVA amount
-        # IVA Amount = Subtotal * iva_rate
-        # Ret = IVA Amount * (2/3)
-        iva_amount = subtotal * iva_rate
-        ret_iva = iva_amount * (Decimal("2") / Decimal("3"))
+        # IVA Retention
+        ret_iva = subtotal * Decimal("0.106667")
         retentions["iva"] = ret_iva.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     return retentions

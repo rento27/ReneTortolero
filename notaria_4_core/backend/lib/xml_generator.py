@@ -79,7 +79,7 @@ def generate_signed_xml(invoice_data: dict) -> bytes:
                         'Impuesto': '002',
                         'TipoFactor': 'Tasa',
                         'TasaOCuota': '0.106667',
-                        'Importe': ret_iva
+                        'Importe': base * Decimal("0.106667")
                     }
                 ]
                 impuestos_concepto['Retenciones'] = retenciones
@@ -120,21 +120,16 @@ def generate_signed_xml(invoice_data: dict) -> bytes:
             # Re-instantiate Pydantic model to ensure validation
             comp_model = ComplementoNotariosModel(**invoice_data['complemento_notarios'])
             complemento = create_complemento_notarios(comp_model)
-            cfdi.add_complemento(complemento)
+            cfdi_kwargs['Complemento'] = complemento
+            cfdi = cfdi40.Comprobante(**cfdi_kwargs)
 
         # 5. Signing
         signer = load_signer_from_secret_manager()
         if signer is None:
-            # Check if we should allow unsigned for tests
-            import os
-            if os.environ.get("MOCK_SIGNER") != "1":
-                raise ValueError("Signer could not be loaded from Secret Manager.")
+            raise ValueError("Signer could not be loaded from Secret Manager.")
 
-            # Unsigned stub string return
-            return cfdi.xml_bytes()
-        else:
-            cfdi.sign(signer)
-            return cfdi.xml_bytes()
+        cfdi.sign(signer)
+        return cfdi.xml_bytes()
 
     except Exception as e:
         logger.error(f"Error generating CFDI: {e}")
