@@ -3,6 +3,7 @@ from decimal import Decimal
 import uuid
 import os
 import shutil
+import base64
 
 from lib.api_models import InvoiceRequest, ISAIRequest
 from lib.fiscal_engine import sanitize_name, calculate_isai_manzanillo, calculate_retentions, validate_postal_code
@@ -38,10 +39,10 @@ def create_cfdi(request: InvoiceRequest):
     try:
         xml_bytes = generate_signed_xml(data)
         # In a real scenario, we might upload this to storage and return a URL
-        # For now, return the stub content
+        # For now, return the base64 encoded XML string
         return {
             "status": "success",
-            "xml_base64": xml_bytes.decode('utf-8'), # Stub returns simple string bytes
+            "xml_base64": base64.b64encode(xml_bytes).decode('utf-8'),
             "retentions_calculated": retentions
         }
     except ValueError as ve:
