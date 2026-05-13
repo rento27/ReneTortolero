@@ -7,5 +7,10 @@ pymupdf
 pytesseract
 firebase-admin
 pytest
+pytest-mock
 httpx
 python-multipart
+Pillow
+cachetools
+pdf2image
+pydantic>=2.0

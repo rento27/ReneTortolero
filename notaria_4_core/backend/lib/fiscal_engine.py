@@ -1,6 +1,9 @@
 import re
 import unicodedata
+import time
 from decimal import Decimal, getcontext, ROUND_HALF_UP
+import firebase_admin
+from firebase_admin import remote_config
 
 # Set strict decimal precision
 getcontext().prec = 50
@@ -69,13 +72,46 @@ def sanitize_name(name: str) -> str:
     # Basic uppercase conversion as SAT usually expects uppercase
     return clean_name.upper()
 
-def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = Decimal("0.03")) -> Decimal:
+_ISAI_RATE_CACHE = None
+_ISAI_RATE_CACHE_TTL = 3600
+_ISAI_RATE_LAST_FETCH = 0
+
+def get_remote_config_sync():
+    """
+    Fetches the remote config template synchronously.
+    """
+    if not firebase_admin._apps:
+        # Initialize default app if not already initialized
+        firebase_admin.initialize_app()
+    return remote_config.get_remote_config()
+
+def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = None) -> Decimal:
     """
     Calculates ISAI for Manzanillo.
     Formula: Max(Price, Cadastral) * Rate
+    Defaults to fetching tasa_isai_manzanillo from Firebase Remote Config if rate is not provided.
     """
+    global _ISAI_RATE_CACHE, _ISAI_RATE_LAST_FETCH
+
+    if rate is None:
+        current_time = time.time()
+        if _ISAI_RATE_CACHE is None or (current_time - _ISAI_RATE_LAST_FETCH > _ISAI_RATE_CACHE_TTL):
+            try:
+                template = get_remote_config_sync()
+                # Access the value, defaulting to 0.03 if missing
+                val_str = template.parameters.get("tasa_isai_manzanillo").default_value.value
+                _ISAI_RATE_CACHE = Decimal(str(val_str))
+                _ISAI_RATE_LAST_FETCH = current_time
+            except Exception:
+                # Fallback to default if there's an error fetching
+                _ISAI_RATE_CACHE = Decimal("0.03")
+
+        effective_rate = _ISAI_RATE_CACHE
+    else:
+        effective_rate = rate
+
     base = max(operation_price, cadastral_value)
-    isai = base * rate
+    isai = base * effective_rate
     # Standard rounding to 2 decimals for currency
     return isai.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
