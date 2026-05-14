@@ -60,6 +60,7 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
                 tipo_inmueble=inmueble.tipo_inmueble,
                 calle=inmueble.calle,
                 estado=inmueble.estado,
+                municipio=inmueble.municipio,
                 pais=inmueble.pais,
                 codigo_postal=inmueble.codigo_postal
             )
@@ -75,7 +76,7 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
         if adq.copro_soc_conyugal_e == 'Si':
             # Create DatosAdquirienteCopSC object
             adquiriente_cop_sc_list.append(
-                notariospublicos10.DatosAdquirienteCopSC(
+                notariospublicos10.DatosAdquirientesCopSC(
                     nombre=nombre,
                     apellido_paterno=paterno,
                     apellido_materno=materno,
@@ -100,10 +101,12 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
 
     if adquiriente_cop_sc_list:
         datos_adquiriente = notariospublicos10.DatosAdquiriente(
+            copro_soc_conyugal_e='Si',
             datos_adquirientes_cop_sc=adquiriente_cop_sc_list
         )
     else:
         datos_adquiriente = notariospublicos10.DatosAdquiriente(
+            copro_soc_conyugal_e='No',
             datos_un_adquiriente=un_adquiriente
         )
 
@@ -144,10 +147,12 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
 
     if enajenante_cop_sc_list:
         datos_enajenante = notariospublicos10.DatosEnajenante(
+            copro_soc_conyugal_e='Si',
             datos_enajenantes_cop_sc=enajenante_cop_sc_list
         )
     else:
         datos_enajenante = notariospublicos10.DatosEnajenante(
+            copro_soc_conyugal_e='No',
             datos_un_enajenante=un_enajenante
         )
 
@@ -160,7 +165,7 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
         desc_inmuebles=desc_inmuebles,
         datos_operacion=notariospublicos10.DatosOperacion(
             num_instrumento_notarial=1,
-            fecha_inst_notarial=fecha_inst,
+            fecha_inst_notarial=datetime.strptime(fecha_inst, "%Y-%m-%d").date(),
             monto_operacion=Decimal('0.00'),
             subtotal=Decimal('0.00'),
             iva=Decimal('0.00')
