@@ -9,3 +9,8 @@ firebase-admin
 pytest
 httpx
 python-multipart
+pydantic>=2.0
+cachetools
+pdf2image
+pytest-mock
+Pillow

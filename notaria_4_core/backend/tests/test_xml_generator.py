@@ -1,10 +1,13 @@
 import os
 import pytest
 from decimal import Decimal
+from unittest.mock import patch, MagicMock
 from notaria_4_core.backend.lib.xml_generator import generate_signed_xml
 
-def test_generate_xml():
-    os.environ["MOCK_SIGNER"] = "1"
+@patch('notaria_4_core.backend.lib.xml_generator.load_signer_from_secret_manager')
+@patch('satcfdi.create.cfd.cfdi40.Comprobante.sign')
+def test_generate_xml(mock_sign, mock_load_signer):
+    mock_load_signer.return_value = MagicMock()
     data = {
         'receptor': {
             'rfc': 'ABC123456T12',
@@ -24,7 +27,41 @@ def test_generate_xml():
                 'importe': '1000.00',
                 'objeto_imp': '02'
             }
-        ]
+        ],
+        'complemento_notarios': {
+            'version': '1.0',
+            'fecha_inst_notarial': '2023-10-25',
+            'desc_inmuebles': [
+                {
+                    'tipo_inmueble': '03',
+                    'calle': 'Av. Principal',
+                    'estado': 'COL',
+                    'municipio': 'Manzanillo',
+                    'pais': 'MEX',
+                    'codigo_postal': '28200'
+                }
+            ],
+            'datos_enajenantes': [
+                {
+                    'copro_soc_conyugal_e': 'No',
+                    'nombre': 'JUAN',
+                    'apellido_paterno': 'PEREZ',
+                    'apellido_materno': 'GARCIA',
+                    'rfc': 'PEPJ800101XYZ',
+                    'curp': 'PEPJ800101HCOLRX01'
+                }
+            ],
+            'datos_adquirientes': [
+                {
+                    'copro_soc_conyugal_e': 'No',
+                    'nombre': 'MARIA',
+                    'apellido_paterno': 'LOPEZ',
+                    'apellido_materno': 'MARTINEZ',
+                    'rfc': 'LOMM850101ABC',
+                    'curp': 'LOMM850101MCOLRX01'
+                }
+            ]
+        }
     }
 
     xml = generate_signed_xml(data)
