@@ -1,9 +1,51 @@
 import re
 import unicodedata
 from decimal import Decimal, getcontext, ROUND_HALF_UP
+import time
+
+try:
+    import firebase_admin
+    from firebase_admin import remote_config
+except ImportError:
+    firebase_admin = None
+    remote_config = None
 
 # Set strict decimal precision
 getcontext().prec = 50
+
+_ISAI_RATE_CACHE = None
+_ISAI_RATE_CACHE_TTL = 3600
+_ISAI_RATE_CACHE_TIME = 0
+
+def get_remote_config_sync() -> Decimal:
+    """
+    Fetches the 'tasa_isai_manzanillo' from Firebase Remote Config.
+    Caches the result for 1 hour.
+    """
+    global _ISAI_RATE_CACHE, _ISAI_RATE_CACHE_TIME
+
+    if _ISAI_RATE_CACHE is not None and (time.time() - _ISAI_RATE_CACHE_TIME) < _ISAI_RATE_CACHE_TTL:
+        return _ISAI_RATE_CACHE
+
+    default_rate = Decimal("0.03")
+
+    if not firebase_admin or not remote_config:
+        return default_rate
+
+    try:
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app()
+        template = remote_config.get_remote_config()
+        if 'tasa_isai_manzanillo' in template.parameters:
+            rate_str = template.parameters['tasa_isai_manzanillo'].default_value.value
+            _ISAI_RATE_CACHE = Decimal(rate_str)
+            _ISAI_RATE_CACHE_TIME = time.time()
+            return _ISAI_RATE_CACHE
+    except Exception as e:
+        # fallback
+        pass
+
+    return default_rate
 
 # Corporate Regimes to strip (Regex pattern)
 # Matches common endings like S.A. DE C.V., S.C., etc., allowing for optional punctuation and casing.
@@ -69,11 +111,14 @@ def sanitize_name(name: str) -> str:
     # Basic uppercase conversion as SAT usually expects uppercase
     return clean_name.upper()
 
-def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = Decimal("0.03")) -> Decimal:
+def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = None) -> Decimal:
     """
     Calculates ISAI for Manzanillo.
     Formula: Max(Price, Cadastral) * Rate
     """
+    if rate is None:
+        rate = get_remote_config_sync()
+
     base = max(operation_price, cadastral_value)
     isai = base * rate
     # Standard rounding to 2 decimals for currency
@@ -98,11 +143,8 @@ def calculate_retentions(rfc_receptor: str, subtotal: Decimal, iva_rate: Decimal
         # ISR Retention: 10% of Subtotal
         retentions["isr"] = (subtotal * ISR_RETENTION_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
-        # IVA Retention: 2/3 of the IVA amount
-        # IVA Amount = Subtotal * iva_rate
-        # Ret = IVA Amount * (2/3)
-        iva_amount = subtotal * iva_rate
-        ret_iva = iva_amount * (Decimal("2") / Decimal("3"))
+        # IVA Retention: 10.6667% of Subtotal explicitly
+        ret_iva = subtotal * Decimal("0.106667")
         retentions["iva"] = ret_iva.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     return retentions
