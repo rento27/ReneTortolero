@@ -1,6 +1,9 @@
 import re
 import unicodedata
+import time
 from decimal import Decimal, getcontext, ROUND_HALF_UP
+import firebase_admin
+from firebase_admin import remote_config
 
 # Set strict decimal precision
 getcontext().prec = 50
@@ -44,6 +47,17 @@ def validate_postal_code(cp: str, expected_state: str = None) -> bool:
 
     return True
 
+_ISAI_RATE_CACHE = None
+_ISAI_RATE_CACHE_TTL = 3600
+_ISAI_RATE_LAST_FETCH = 0
+
+def get_remote_config_sync():
+    """Helper to fetch remote config template directly."""
+    try:
+        return remote_config.get_remote_config()
+    except Exception:
+        return None
+
 def sanitize_name(name: str) -> str:
     """
     Removes corporate regimes from the name for CFDI 4.0 validation.
@@ -69,11 +83,29 @@ def sanitize_name(name: str) -> str:
     # Basic uppercase conversion as SAT usually expects uppercase
     return clean_name.upper()
 
-def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = Decimal("0.03")) -> Decimal:
+def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = None) -> Decimal:
     """
     Calculates ISAI for Manzanillo.
     Formula: Max(Price, Cadastral) * Rate
     """
+    global _ISAI_RATE_CACHE, _ISAI_RATE_LAST_FETCH
+
+    if rate is None:
+        current_time = time.time()
+        if _ISAI_RATE_CACHE is None or current_time - _ISAI_RATE_LAST_FETCH > _ISAI_RATE_CACHE_TTL:
+            try:
+                template = get_remote_config_sync()
+                if template and "tasa_isai_manzanillo" in template.parameters:
+                    param_val = template.parameters["tasa_isai_manzanillo"].default_value.value
+                    _ISAI_RATE_CACHE = Decimal(str(param_val))
+                    _ISAI_RATE_LAST_FETCH = current_time
+                else:
+                    _ISAI_RATE_CACHE = Decimal("0.03") # default fallback
+            except Exception:
+                _ISAI_RATE_CACHE = Decimal("0.03") # default fallback
+
+        rate = _ISAI_RATE_CACHE
+
     base = max(operation_price, cadastral_value)
     isai = base * rate
     # Standard rounding to 2 decimals for currency
