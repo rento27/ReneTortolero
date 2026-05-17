@@ -48,7 +48,9 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
 
     # Try parsing the date strictly to ensure it's a valid calendar date
     try:
-        datetime.strptime(fecha_inst, "%Y-%m-%d")
+        fecha_inst_date = datetime.strptime(fecha_inst, "%Y-%m-%d").date()
+        if fecha_inst_date > datetime.now().date():
+            raise ValueError(f"fecha_inst_notarial cannot be a future date, got '{fecha_inst}'")
     except ValueError as e:
         raise ValueError(f"Invalid date for fecha_inst_notarial: {e}")
 
@@ -59,6 +61,7 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
             notariospublicos10.DescInmueble(
                 tipo_inmueble=inmueble.tipo_inmueble,
                 calle=inmueble.calle,
+                municipio=inmueble.municipio,
                 estado=inmueble.estado,
                 pais=inmueble.pais,
                 codigo_postal=inmueble.codigo_postal
@@ -69,8 +72,11 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
     adquiriente_cop_sc_list = []
     un_adquiriente = None
     adquiriente_sum_percentages = Decimal("0.0")
+    adquiriente_copro_soc_conyugal_e = 'No'
 
     for adq in complemento_model.datos_adquirientes:
+        if adq.copro_soc_conyugal_e == 'Si':
+            adquiriente_copro_soc_conyugal_e = 'Si'
         nombre, paterno, materno = split_name(adq.nombre, adq.apellido_paterno, adq.apellido_materno)
         if adq.copro_soc_conyugal_e == 'Si':
             # Create DatosAdquirienteCopSC object
@@ -100,10 +106,12 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
 
     if adquiriente_cop_sc_list:
         datos_adquiriente = notariospublicos10.DatosAdquiriente(
+            copro_soc_conyugal_e=adquiriente_copro_soc_conyugal_e,
             datos_adquirientes_cop_sc=adquiriente_cop_sc_list
         )
     else:
         datos_adquiriente = notariospublicos10.DatosAdquiriente(
+            copro_soc_conyugal_e=adquiriente_copro_soc_conyugal_e,
             datos_un_adquiriente=un_adquiriente
         )
 
@@ -111,15 +119,18 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
     enajenante_cop_sc_list = []
     un_enajenante = None
     enajenante_sum_percentages = Decimal("0.0")
+    enajenante_copro_soc_conyugal_e = 'No'
 
     for ena in complemento_model.datos_enajenantes:
+        if ena.copro_soc_conyugal_e == 'Si':
+            enajenante_copro_soc_conyugal_e = 'Si'
         if not ena.curp:
             raise ValueError("CURP is mandatory for DatosEnajenante")
 
         nombre, paterno, materno = split_name(ena.nombre, ena.apellido_paterno, ena.apellido_materno)
         if ena.copro_soc_conyugal_e == 'Si':
             enajenante_cop_sc_list.append(
-                notariospublicos10.DatosEnajenantesCopSC(
+                notariospublicos10.DatosEnajenanteCopSC(
                     nombre=nombre,
                     apellido_paterno=paterno,
                     apellido_materno=materno,
@@ -144,10 +155,12 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
 
     if enajenante_cop_sc_list:
         datos_enajenante = notariospublicos10.DatosEnajenante(
+            copro_soc_conyugal_e=enajenante_copro_soc_conyugal_e,
             datos_enajenantes_cop_sc=enajenante_cop_sc_list
         )
     else:
         datos_enajenante = notariospublicos10.DatosEnajenante(
+            copro_soc_conyugal_e=enajenante_copro_soc_conyugal_e,
             datos_un_enajenante=un_enajenante
         )
 
@@ -160,7 +173,7 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
         desc_inmuebles=desc_inmuebles,
         datos_operacion=notariospublicos10.DatosOperacion(
             num_instrumento_notarial=1,
-            fecha_inst_notarial=fecha_inst,
+            fecha_inst_notarial=fecha_inst_date,
             monto_operacion=Decimal('0.00'),
             subtotal=Decimal('0.00'),
             iva=Decimal('0.00')
