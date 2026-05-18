@@ -1,9 +1,21 @@
 import re
 import unicodedata
 from decimal import Decimal, getcontext, ROUND_HALF_UP
+import time
+
+try:
+    import firebase_admin
+    from firebase_admin import remote_config
+except ImportError:
+    firebase_admin = None
+    remote_config = None
 
 # Set strict decimal precision
 getcontext().prec = 50
+
+# Global cache for remote config
+_ISAI_RATE_CACHE = None
+_ISAI_RATE_CACHE_TTL = 3600
 
 # Corporate Regimes to strip (Regex pattern)
 # Matches common endings like S.A. DE C.V., S.C., etc., allowing for optional punctuation and casing.
@@ -20,29 +32,35 @@ ISR_RETENTION_RATE = Decimal("0.10")
 # The prompt says "Matemáticamente, esto equivale a una tasa del 10.6667%".
 IVA_RETENTION_RATE_DIRECT = Decimal("0.106667")
 
-# Stub for Postal Code Catalog (Manzanillo samples)
-# In production, this would be loaded from Firestore/Cache
-VALID_POSTAL_CODES = {
-    "28200": "COL",
-    "28218": "COL",
-    "28230": "COL",
-    "06600": "CMX" # Mexico City sample
-}
-
 def validate_postal_code(cp: str, expected_state: str = None) -> bool:
     """
-    Validates the postal code against the authorized catalog.
+    Validates the postal code against the authorized catalog by querying the
+    catalogos_sat Firestore collection.
     If expected_state (e.g., 'COL') is provided, ensures the CP belongs to that state.
     """
-    if cp not in VALID_POSTAL_CODES:
-        # In this stub, we reject unknown CPs.
-        # In production, this would reject CPs not found in the full SAT catalog.
+    if not firebase_admin:
+        # Fallback if firebase is not initialized
         return False
 
-    if expected_state and VALID_POSTAL_CODES[cp] != expected_state:
-        return False
+    try:
+        from firebase_admin import firestore
+        db = firestore.client()
 
-    return True
+        # Query the catalogos_sat collection where document ID is the CP, or query by field
+        # Assuming we query the collection for a document where id == cp or field c_CodigoPostal == cp
+        query_ref = db.collection('catalogos_sat').where('c_CodigoPostal', '==', cp).limit(1)
+        docs = list(query_ref.stream())
+
+        if not docs:
+            return False
+
+        doc_data = docs[0].to_dict()
+        if expected_state and doc_data.get('c_Estado') != expected_state:
+            return False
+
+        return True
+    except Exception:
+        return False
 
 def sanitize_name(name: str) -> str:
     """
@@ -69,11 +87,38 @@ def sanitize_name(name: str) -> str:
     # Basic uppercase conversion as SAT usually expects uppercase
     return clean_name.upper()
 
-def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = Decimal("0.03")) -> Decimal:
+def get_remote_config_sync():
+    """
+    Fetches the remote config template synchronously.
+    """
+    if not remote_config:
+        return None
+    return remote_config.get_remote_config()
+
+def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = None) -> Decimal:
     """
     Calculates ISAI for Manzanillo.
     Formula: Max(Price, Cadastral) * Rate
     """
+    global _ISAI_RATE_CACHE
+
+    if rate is None:
+        current_time = time.time()
+
+        if _ISAI_RATE_CACHE and (current_time - _ISAI_RATE_CACHE['timestamp'] < _ISAI_RATE_CACHE_TTL):
+            rate = _ISAI_RATE_CACHE['rate']
+        else:
+            try:
+                template = get_remote_config_sync()
+                if template and 'tasa_isai_manzanillo' in template.parameters:
+                    fetched_rate_str = template.parameters['tasa_isai_manzanillo'].default_value.value
+                    rate = Decimal(str(fetched_rate_str))
+                    _ISAI_RATE_CACHE = {'rate': rate, 'timestamp': current_time}
+                else:
+                    rate = Decimal("0.03") # default
+            except Exception:
+                rate = Decimal("0.03") # default
+
     base = max(operation_price, cadastral_value)
     isai = base * rate
     # Standard rounding to 2 decimals for currency
