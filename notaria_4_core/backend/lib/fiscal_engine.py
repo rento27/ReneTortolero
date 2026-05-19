@@ -1,6 +1,11 @@
 import re
 import unicodedata
+import time
 from decimal import Decimal, getcontext, ROUND_HALF_UP
+
+# Mock/Import Firebase for Remote Config and Firestore (in real use)
+import firebase_admin
+from firebase_admin import firestore, remote_config
 
 # Set strict decimal precision
 getcontext().prec = 50
@@ -20,29 +25,35 @@ ISR_RETENTION_RATE = Decimal("0.10")
 # The prompt says "Matemáticamente, esto equivale a una tasa del 10.6667%".
 IVA_RETENTION_RATE_DIRECT = Decimal("0.106667")
 
-# Stub for Postal Code Catalog (Manzanillo samples)
-# In production, this would be loaded from Firestore/Cache
-VALID_POSTAL_CODES = {
-    "28200": "COL",
-    "28218": "COL",
-    "28230": "COL",
-    "06600": "CMX" # Mexico City sample
-}
-
 def validate_postal_code(cp: str, expected_state: str = None) -> bool:
     """
-    Validates the postal code against the authorized catalog.
+    Validates the postal code against the authorized catalog by querying the
+    `catalogos_sat` Firestore collection.
     If expected_state (e.g., 'COL') is provided, ensures the CP belongs to that state.
     """
-    if cp not in VALID_POSTAL_CODES:
-        # In this stub, we reject unknown CPs.
-        # In production, this would reject CPs not found in the full SAT catalog.
-        return False
+    try:
+        db = firestore.client()
+        # Ensure we search the actual document or fragment
+        # Assume each postal code is stored or represented in some format.
+        # Given limitations, let's assume we query by checking if the document exists
+        # or checking an array within a sharded document.
+        # For simplicity, we assume `catalogos_sat/c_CodigoPostal_{cp}` document
+        # or a general lookup.
+        cp_doc_ref = db.collection('catalogos_sat').document(f'c_CodigoPostal_{cp}')
+        cp_doc = cp_doc_ref.get()
 
-    if expected_state and VALID_POSTAL_CODES[cp] != expected_state:
-        return False
+        if not cp_doc.exists:
+            return False
 
-    return True
+        if expected_state:
+            data = cp_doc.to_dict()
+            if data and data.get("estado") != expected_state:
+                return False
+
+        return True
+    except Exception:
+        # If firestore client is not initialized or fails, fail securely
+        return False
 
 def sanitize_name(name: str) -> str:
     """
@@ -69,11 +80,43 @@ def sanitize_name(name: str) -> str:
     # Basic uppercase conversion as SAT usually expects uppercase
     return clean_name.upper()
 
-def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = Decimal("0.03")) -> Decimal:
+_ISAI_RATE_CACHE = None
+_ISAI_RATE_CACHE_TIMESTAMP = 0
+_ISAI_RATE_CACHE_TTL = 3600
+
+def get_remote_config_sync():
+    """
+    Custom sync helper to fetch the remote config template directly.
+    """
+    try:
+        return remote_config.get_remote_config()
+    except Exception:
+        return None
+
+def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = None) -> Decimal:
     """
     Calculates ISAI for Manzanillo.
     Formula: Max(Price, Cadastral) * Rate
+    If rate is omitted, attempts to load 'tasa_isai_manzanillo' from Firebase Remote Config.
     """
+    global _ISAI_RATE_CACHE, _ISAI_RATE_CACHE_TIMESTAMP
+    current_time = time.time()
+
+    if rate is None:
+        if _ISAI_RATE_CACHE is None or (current_time - _ISAI_RATE_CACHE_TIMESTAMP) > _ISAI_RATE_CACHE_TTL:
+            rc = get_remote_config_sync()
+            if rc and 'tasa_isai_manzanillo' in rc.parameters:
+                try:
+                    # In python admin SDK, parameters are objects containing default_value
+                    param_val = rc.parameters['tasa_isai_manzanillo'].default_value.value
+                    _ISAI_RATE_CACHE = Decimal(str(param_val))
+                    _ISAI_RATE_CACHE_TIMESTAMP = current_time
+                except Exception:
+                    _ISAI_RATE_CACHE = Decimal("0.03") # fallback
+            else:
+                _ISAI_RATE_CACHE = Decimal("0.03") # fallback
+        rate = _ISAI_RATE_CACHE
+
     base = max(operation_price, cadastral_value)
     isai = base * rate
     # Standard rounding to 2 decimals for currency
