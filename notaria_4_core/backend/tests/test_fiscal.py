@@ -1,6 +1,8 @@
 from decimal import Decimal
 import pytest
+from unittest.mock import patch, MagicMock
 from notaria_4_core.backend.lib.fiscal_engine import sanitize_name, validate_copropiedad, calculate_retentions, calculate_isai_manzanillo, validate_postal_code
+import notaria_4_core.backend.lib.fiscal_engine as fiscal_engine
 
 def test_sanitize_name():
     # Test removal of S.A. DE C.V.
@@ -30,7 +32,7 @@ def test_calculate_retentions_moral():
 
     assert ret["is_moral"] is True
     assert ret["isr"] == Decimal("100.00") # 10%
-    # IVA Ret = 1000 * 0.16 * 2/3 = 160 * 0.6666... = 106.666... -> 106.67
+    # IVA Ret = 1000 * 0.106667 = 106.667 -> 106.67
     assert ret["iva"] == Decimal("106.67")
 
 def test_calculate_retentions_fisica():
@@ -42,16 +44,49 @@ def test_calculate_retentions_fisica():
     assert ret["is_moral"] is False
     assert ret["isr"] == Decimal("0.00")
 
-def test_isai_manzanillo():
+@patch("notaria_4_core.backend.lib.fiscal_engine.get_remote_config_sync")
+def test_isai_manzanillo(mock_get_remote_config):
+    # Setup mock
+    mock_template = MagicMock()
+    mock_param = MagicMock()
+    mock_param.default_value.value = "0.04"
+    mock_template.parameters.get.return_value = mock_param
+    mock_get_remote_config.return_value = mock_template
+
+    # Clear cache before test
+    fiscal_engine._ISAI_RATE_CACHE = None
+
     price = Decimal("1000000.00")
     cadastral = Decimal("500000.00")
-    # Max is 1M. Rate 0.03 -> 30,000
-    assert calculate_isai_manzanillo(price, cadastral) == Decimal("30000.00")
+
+    # Max is 1M. Rate 0.04 -> 40,000
+    assert calculate_isai_manzanillo(price, cadastral) == Decimal("40000.00")
 
     # Cadastral higher
-    assert calculate_isai_manzanillo(price, Decimal("2000000.00")) == Decimal("60000.00")
+    assert calculate_isai_manzanillo(price, Decimal("2000000.00")) == Decimal("80000.00")
 
+@patch.dict('sys.modules', {'firebase_admin.firestore': MagicMock()})
 def test_validate_postal_code():
+    import firebase_admin.firestore
+    import sys
+
+    # Mock Firestore behavior
+    mock_db = MagicMock()
+    sys.modules['firebase_admin.firestore'].client.return_value = mock_db
+
+    mock_doc_ref = MagicMock()
+    mock_db.collection.return_value.document.return_value = mock_doc_ref
+
+    mock_doc = MagicMock()
+    mock_doc.exists = True
+    mock_doc.to_dict.return_value = {
+        "28200": "COL",
+        "28218": "COL",
+        "28230": "COL",
+        "06600": "CMX"
+    }
+    mock_doc_ref.get.return_value = mock_doc
+
     # Known CP
     assert validate_postal_code("28200") is True
     assert validate_postal_code("28200", "COL") is True
