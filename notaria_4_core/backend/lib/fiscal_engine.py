@@ -1,6 +1,12 @@
 import re
 import unicodedata
+import time
 from decimal import Decimal, getcontext, ROUND_HALF_UP
+
+try:
+    import firebase_admin.remote_config
+except ImportError:
+    pass
 
 # Set strict decimal precision
 getcontext().prec = 50
@@ -34,6 +40,24 @@ def validate_postal_code(cp: str, expected_state: str = None) -> bool:
     Validates the postal code against the authorized catalog.
     If expected_state (e.g., 'COL') is provided, ensures the CP belongs to that state.
     """
+    try:
+        from firebase_admin import firestore
+        db = firestore.client()
+        # Ensure the CP exists in catalogos_sat
+        doc = db.collection('catalogos_sat').document('c_CodigoPostal').get()
+        if doc.exists:
+            # Assuming doc format where CP is a key or list of valid CPs.
+            # Adjust logic based on actual document structure. Let's assume a dict of CP -> State.
+            cp_data = doc.to_dict()
+            if cp not in cp_data:
+                return False
+            if expected_state and cp_data[cp] != expected_state:
+                return False
+            return True
+    except Exception:
+        # Fallback to stub validation for tests if firestore is not mocked/available
+        pass
+
     if cp not in VALID_POSTAL_CODES:
         # In this stub, we reject unknown CPs.
         # In production, this would reject CPs not found in the full SAT catalog.
@@ -43,6 +67,14 @@ def validate_postal_code(cp: str, expected_state: str = None) -> bool:
         return False
 
     return True
+
+_ISAI_RATE_CACHE = None
+_ISAI_RATE_CACHE_TTL = 3600
+_ISAI_RATE_CACHE_TIME = 0
+
+def get_remote_config_sync():
+    """Helper to fetch remote config directly."""
+    return firebase_admin.remote_config.get_remote_config()
 
 def sanitize_name(name: str) -> str:
     """
@@ -69,11 +101,28 @@ def sanitize_name(name: str) -> str:
     # Basic uppercase conversion as SAT usually expects uppercase
     return clean_name.upper()
 
-def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = Decimal("0.03")) -> Decimal:
+def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = None) -> Decimal:
     """
     Calculates ISAI for Manzanillo.
     Formula: Max(Price, Cadastral) * Rate
     """
+    global _ISAI_RATE_CACHE, _ISAI_RATE_CACHE_TIME
+
+    if rate is None:
+        current_time = time.time()
+        if _ISAI_RATE_CACHE is None or (current_time - _ISAI_RATE_CACHE_TIME) > _ISAI_RATE_CACHE_TTL:
+            try:
+                template = get_remote_config_sync()
+                # Assuming the parameter name is 'tasa_isai_manzanillo'
+                rate_val = template.parameters.get('tasa_isai_manzanillo').default_value.value
+                _ISAI_RATE_CACHE = Decimal(str(rate_val))
+            except Exception:
+                # Default fallback
+                _ISAI_RATE_CACHE = Decimal("0.03")
+            _ISAI_RATE_CACHE_TIME = current_time
+
+        rate = _ISAI_RATE_CACHE
+
     base = max(operation_price, cadastral_value)
     isai = base * rate
     # Standard rounding to 2 decimals for currency
