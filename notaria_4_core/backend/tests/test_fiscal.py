@@ -1,6 +1,8 @@
 from decimal import Decimal
 import pytest
+from unittest.mock import patch
 from notaria_4_core.backend.lib.fiscal_engine import sanitize_name, validate_copropiedad, calculate_retentions, calculate_isai_manzanillo, validate_postal_code
+import notaria_4_core.backend.lib.fiscal_engine
 
 def test_sanitize_name():
     # Test removal of S.A. DE C.V.
@@ -42,7 +44,12 @@ def test_calculate_retentions_fisica():
     assert ret["is_moral"] is False
     assert ret["isr"] == Decimal("0.00")
 
-def test_isai_manzanillo():
+@patch("notaria_4_core.backend.lib.fiscal_engine.get_remote_config_sync")
+def test_isai_manzanillo(mock_get_remote_config):
+    # Clear cache to prevent state leakage
+    notaria_4_core.backend.lib.fiscal_engine._ISAI_RATE_CACHE = None
+    mock_get_remote_config.return_value = Decimal("0.03")
+
     price = Decimal("1000000.00")
     cadastral = Decimal("500000.00")
     # Max is 1M. Rate 0.03 -> 30,000
@@ -51,13 +58,24 @@ def test_isai_manzanillo():
     # Cadastral higher
     assert calculate_isai_manzanillo(price, Decimal("2000000.00")) == Decimal("60000.00")
 
-def test_validate_postal_code():
-    # Known CP
+@patch('notaria_4_core.backend.lib.fiscal_engine.firestore', create=True)
+def test_validate_postal_code(mock_firestore):
+    mock_db = mock_firestore.client.return_value
+    mock_collection = mock_db.collection.return_value
+    mock_doc_ref = mock_collection.document.return_value
+    mock_doc = mock_doc_ref.get.return_value
+
+    # Test valid CP without state
+    mock_doc.exists = True
+    mock_doc.to_dict.return_value = {"estado": "COL"}
     assert validate_postal_code("28200") is True
+
+    # Test valid CP with state
     assert validate_postal_code("28200", "COL") is True
 
-    # Wrong State
+    # Test invalid state
     assert validate_postal_code("28200", "JAL") is False
 
-    # Unknown CP
+    # Test non-existent CP
+    mock_doc.exists = False
     assert validate_postal_code("99999") is False

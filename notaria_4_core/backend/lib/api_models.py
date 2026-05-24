@@ -44,6 +44,7 @@ class DescInmueble(BaseModel):
     tipo_inmueble: str
     calle: str
     estado: str
+    municipio: str
     pais: str = "MEX"
     codigo_postal: str
 

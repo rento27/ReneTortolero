@@ -1,6 +1,16 @@
 import re
 import unicodedata
+import time
 from decimal import Decimal, getcontext, ROUND_HALF_UP
+
+try:
+    import firebase_admin
+    from firebase_admin import remote_config
+    from firebase_admin import firestore
+except ImportError:
+    firebase_admin = None
+    remote_config = None
+    firestore = None
 
 # Set strict decimal precision
 getcontext().prec = 50
@@ -20,29 +30,71 @@ ISR_RETENTION_RATE = Decimal("0.10")
 # The prompt says "Matemáticamente, esto equivale a una tasa del 10.6667%".
 IVA_RETENTION_RATE_DIRECT = Decimal("0.106667")
 
-# Stub for Postal Code Catalog (Manzanillo samples)
-# In production, this would be loaded from Firestore/Cache
-VALID_POSTAL_CODES = {
-    "28200": "COL",
-    "28218": "COL",
-    "28230": "COL",
-    "06600": "CMX" # Mexico City sample
-}
-
 def validate_postal_code(cp: str, expected_state: str = None) -> bool:
     """
-    Validates the postal code against the authorized catalog.
-    If expected_state (e.g., 'COL') is provided, ensures the CP belongs to that state.
+    Validates the postal code against the authorized catalog by querying the 'catalogos_sat'
+    collection in Firestore.
     """
-    if cp not in VALID_POSTAL_CODES:
-        # In this stub, we reject unknown CPs.
-        # In production, this would reject CPs not found in the full SAT catalog.
+    if not firebase_admin or not firestore:
+        # Fallback if firestore isn't available
         return False
 
-    if expected_state and VALID_POSTAL_CODES[cp] != expected_state:
+    try:
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app()
+
+        db = firestore.client()
+        # Querying the catalogos_sat root collection for the document with the CP
+        doc_ref = db.collection('catalogos_sat').document(f'cp_{cp}')
+        doc = doc_ref.get()
+
+        if not doc.exists:
+            return False
+
+        doc_data = doc.to_dict()
+
+        if expected_state and doc_data.get('estado') != expected_state:
+            return False
+
+        return True
+    except Exception:
         return False
 
-    return True
+_ISAI_RATE_CACHE = None
+_ISAI_RATE_CACHE_TIME = 0
+_ISAI_RATE_CACHE_TTL = 3600
+
+def get_remote_config_sync() -> Decimal:
+    """
+    Fetches the 'tasa_isai_manzanillo' from Firebase Remote Config.
+    Uses a 1-hour cache.
+    Returns 0.03 (3%) as fallback.
+    """
+    global _ISAI_RATE_CACHE, _ISAI_RATE_CACHE_TIME
+
+    current_time = time.time()
+    if _ISAI_RATE_CACHE is not None and (current_time - _ISAI_RATE_CACHE_TIME) < _ISAI_RATE_CACHE_TTL:
+        return _ISAI_RATE_CACHE
+
+    default_rate = Decimal("0.03")
+
+    if not firebase_admin or not remote_config:
+        return default_rate
+
+    try:
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app()
+
+        template = remote_config.get_remote_config()
+        if 'tasa_isai_manzanillo' in template.parameters:
+            rate_str = template.parameters['tasa_isai_manzanillo'].default_value.value
+            _ISAI_RATE_CACHE = Decimal(rate_str)
+            _ISAI_RATE_CACHE_TIME = current_time
+            return _ISAI_RATE_CACHE
+    except Exception:
+        pass
+
+    return default_rate
 
 def sanitize_name(name: str) -> str:
     """
@@ -69,11 +121,14 @@ def sanitize_name(name: str) -> str:
     # Basic uppercase conversion as SAT usually expects uppercase
     return clean_name.upper()
 
-def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = Decimal("0.03")) -> Decimal:
+def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = None) -> Decimal:
     """
     Calculates ISAI for Manzanillo.
     Formula: Max(Price, Cadastral) * Rate
     """
+    if rate is None:
+        rate = get_remote_config_sync()
+
     base = max(operation_price, cadastral_value)
     isai = base * rate
     # Standard rounding to 2 decimals for currency
@@ -99,10 +154,8 @@ def calculate_retentions(rfc_receptor: str, subtotal: Decimal, iva_rate: Decimal
         retentions["isr"] = (subtotal * ISR_RETENTION_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
         # IVA Retention: 2/3 of the IVA amount
-        # IVA Amount = Subtotal * iva_rate
-        # Ret = IVA Amount * (2/3)
-        iva_amount = subtotal * iva_rate
-        ret_iva = iva_amount * (Decimal("2") / Decimal("3"))
+        # Direct calculation using 10.6667%
+        ret_iva = subtotal * IVA_RETENTION_RATE_DIRECT
         retentions["iva"] = ret_iva.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     return retentions
