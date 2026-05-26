@@ -1,6 +1,18 @@
 import re
 import unicodedata
+import time
 from decimal import Decimal, getcontext, ROUND_HALF_UP
+
+try:
+    import firebase_admin
+    from firebase_admin import firestore
+except ImportError:
+    firestore = None
+
+def get_remote_config_sync():
+    import firebase_admin
+    from firebase_admin import remote_config
+    return remote_config.get_remote_config()
 
 # Set strict decimal precision
 getcontext().prec = 50
@@ -20,26 +32,31 @@ ISR_RETENTION_RATE = Decimal("0.10")
 # The prompt says "Matemáticamente, esto equivale a una tasa del 10.6667%".
 IVA_RETENTION_RATE_DIRECT = Decimal("0.106667")
 
-# Stub for Postal Code Catalog (Manzanillo samples)
-# In production, this would be loaded from Firestore/Cache
-VALID_POSTAL_CODES = {
-    "28200": "COL",
-    "28218": "COL",
-    "28230": "COL",
-    "06600": "CMX" # Mexico City sample
-}
+# Cache for ISAI rate
+_ISAI_RATE_CACHE = None
+_ISAI_RATE_CACHE_TTL = 3600  # 1 hour in seconds
+_ISAI_RATE_CACHE_TIMESTAMP = 0
 
 def validate_postal_code(cp: str, expected_state: str = None) -> bool:
     """
-    Validates the postal code against the authorized catalog.
+    Validates the postal code against the authorized catalog in Firestore.
     If expected_state (e.g., 'COL') is provided, ensures the CP belongs to that state.
     """
-    if cp not in VALID_POSTAL_CODES:
-        # In this stub, we reject unknown CPs.
-        # In production, this would reject CPs not found in the full SAT catalog.
+    if not firestore:
+        raise RuntimeError("firestore module not found")
+
+    db = firestore.client()
+    doc_ref = db.collection('catalogos_sat').document('c_CodigoPostal')
+    doc = doc_ref.get()
+
+    if not doc.exists:
         return False
 
-    if expected_state and VALID_POSTAL_CODES[cp] != expected_state:
+    data = doc.to_dict()
+    if cp not in data:
+        return False
+
+    if expected_state and data[cp] != expected_state:
         return False
 
     return True
@@ -69,11 +86,33 @@ def sanitize_name(name: str) -> str:
     # Basic uppercase conversion as SAT usually expects uppercase
     return clean_name.upper()
 
-def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = Decimal("0.03")) -> Decimal:
+def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = None) -> Decimal:
     """
     Calculates ISAI for Manzanillo.
     Formula: Max(Price, Cadastral) * Rate
     """
+    global _ISAI_RATE_CACHE
+    global _ISAI_RATE_CACHE_TIMESTAMP
+
+    if rate is None:
+        current_time = time.time()
+        if _ISAI_RATE_CACHE is None or current_time - _ISAI_RATE_CACHE_TIMESTAMP > _ISAI_RATE_CACHE_TTL:
+            try:
+                template = get_remote_config_sync()
+                val = template.parameters.get("tasa_isai_manzanillo")
+                if val and val.default_value:
+                    rate = Decimal(str(val.default_value.value))
+                else:
+                    rate = Decimal("0.03")  # Fallback
+                _ISAI_RATE_CACHE = rate
+                _ISAI_RATE_CACHE_TIMESTAMP = current_time
+            except Exception:
+                rate = Decimal("0.03")  # Fallback
+                _ISAI_RATE_CACHE = rate
+                _ISAI_RATE_CACHE_TIMESTAMP = current_time
+        else:
+            rate = _ISAI_RATE_CACHE
+
     base = max(operation_price, cadastral_value)
     isai = base * rate
     # Standard rounding to 2 decimals for currency
@@ -101,8 +140,8 @@ def calculate_retentions(rfc_receptor: str, subtotal: Decimal, iva_rate: Decimal
         # IVA Retention: 2/3 of the IVA amount
         # IVA Amount = Subtotal * iva_rate
         # Ret = IVA Amount * (2/3)
-        iva_amount = subtotal * iva_rate
-        ret_iva = iva_amount * (Decimal("2") / Decimal("3"))
+        # Using exact 10.6667% representation
+        ret_iva = subtotal * IVA_RETENTION_RATE_DIRECT
         retentions["iva"] = ret_iva.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     return retentions

@@ -1,56 +1,49 @@
-import re
-from datetime import datetime
+from datetime import datetime, date
 from decimal import Decimal
-from typing import List, Tuple
 
+# Check for satcfdi availability
 try:
     from satcfdi.create.cfd import notariospublicos10
 except ImportError:
     notariospublicos10 = None
 
-def split_name(full_name: str, apellido_paterno: str = None, apellido_materno: str = None) -> Tuple[str, str, str]:
+def split_name(full_name: str, paterno: str = None, materno: str = None) -> tuple:
     """
-    Returns a 3-tuple (nombre, apellido_paterno, apellido_materno).
-    If apellido_paterno or apellido_materno are provided, they take precedence.
-    Otherwise, attempts to split the full name.
-    Returns (full_name, '', '') when a single word input is provided to avoid ambiguous surname assignments.
+    Helper to split a full name into (nombre, paterno, materno) if they are not provided separately.
     """
-    if apellido_paterno is not None and apellido_materno is not None:
-        return full_name, apellido_paterno, apellido_materno
+    if paterno or materno:
+        return (full_name, paterno or "", materno or "")
 
-    parts = full_name.split()
-    if len(parts) <= 1:
-        return full_name, '', ''
+    parts = full_name.strip().split()
+    if len(parts) == 1:
+        return (parts[0], "", "")
     elif len(parts) == 2:
-        return parts[0], parts[1], ''
-    elif len(parts) == 3:
-        return parts[0], parts[1], parts[2]
-    else:
-        # Default split logic for >= 4 words
-        # Treat first two words as first name, then next as paternal, next as maternal
-        nombre = " ".join(parts[:-2])
-        paterno = parts[-2]
-        materno = parts[-1]
-        return nombre, paterno, materno
+        return (parts[0], parts[1], "")
+    elif len(parts) >= 3:
+        # Assuming the last two words are the surnames
+        return (" ".join(parts[:-2]), parts[-2], parts[-1])
+    return (full_name, "", "")
 
 def create_complemento_notarios(complemento_model) -> 'notariospublicos10.NotariosPublicos':
     """
-    Creates a NotariosPublicos 1.0 complement object from a ComplementoNotariosModel instance.
-    Validates date formats and coproperty percentages.
+    Constructs the NotariosPublicos complement from a Pydantic model.
     """
     if not notariospublicos10:
-        raise ImportError("satcfdi library is required to generate the NotariosPublicos complement.")
+        raise RuntimeError("satcfdi module is not available")
 
     # Validate date
     fecha_inst = complemento_model.fecha_inst_notarial
-    if not re.match(r"^\d{4}-\d{2}-\d{2}$", fecha_inst):
+    if len(fecha_inst) != 10 or fecha_inst[4] != '-' or fecha_inst[7] != '-':
         raise ValueError(f"fecha_inst_notarial must be in YYYY-MM-DD format, got '{fecha_inst}'")
 
     # Try parsing the date strictly to ensure it's a valid calendar date
     try:
-        datetime.strptime(fecha_inst, "%Y-%m-%d")
+        parsed_date = datetime.strptime(fecha_inst, "%Y-%m-%d").date()
     except ValueError as e:
         raise ValueError(f"Invalid date for fecha_inst_notarial: {e}")
+
+    if parsed_date > date.today():
+        raise ValueError(f"fecha_inst_notarial cannot be a future date: {fecha_inst}")
 
     # Build Inmuebles
     desc_inmuebles = []
@@ -60,6 +53,7 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
                 tipo_inmueble=inmueble.tipo_inmueble,
                 calle=inmueble.calle,
                 estado=inmueble.estado,
+                municipio=inmueble.municipio,
                 pais=inmueble.pais,
                 codigo_postal=inmueble.codigo_postal
             )
@@ -73,9 +67,9 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
     for adq in complemento_model.datos_adquirientes:
         nombre, paterno, materno = split_name(adq.nombre, adq.apellido_paterno, adq.apellido_materno)
         if adq.copro_soc_conyugal_e == 'Si':
-            # Create DatosAdquirienteCopSC object
+            # Create DatosAdquirientesCopSC object
             adquiriente_cop_sc_list.append(
-                notariospublicos10.DatosAdquirienteCopSC(
+                notariospublicos10.DatosAdquirientesCopSC(
                     nombre=nombre,
                     apellido_paterno=paterno,
                     apellido_materno=materno,
@@ -100,10 +94,12 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
 
     if adquiriente_cop_sc_list:
         datos_adquiriente = notariospublicos10.DatosAdquiriente(
+            copro_soc_conyugal_e='Si',
             datos_adquirientes_cop_sc=adquiriente_cop_sc_list
         )
     else:
         datos_adquiriente = notariospublicos10.DatosAdquiriente(
+            copro_soc_conyugal_e='No',
             datos_un_adquiriente=un_adquiriente
         )
 
@@ -144,10 +140,12 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
 
     if enajenante_cop_sc_list:
         datos_enajenante = notariospublicos10.DatosEnajenante(
+            copro_soc_conyugal_e='Si',
             datos_enajenantes_cop_sc=enajenante_cop_sc_list
         )
     else:
         datos_enajenante = notariospublicos10.DatosEnajenante(
+            copro_soc_conyugal_e='No',
             datos_un_enajenante=un_enajenante
         )
 
@@ -160,7 +158,7 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
         desc_inmuebles=desc_inmuebles,
         datos_operacion=notariospublicos10.DatosOperacion(
             num_instrumento_notarial=1,
-            fecha_inst_notarial=fecha_inst,
+            fecha_inst_notarial=parsed_date,
             monto_operacion=Decimal('0.00'),
             subtotal=Decimal('0.00'),
             iva=Decimal('0.00')

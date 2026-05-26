@@ -1,3 +1,4 @@
+pydantic>=2.0
 satcfdi>=4.0.0
 spacy>=3.0.0
 fastapi
@@ -6,6 +7,10 @@ google-cloud-secret-manager
 pymupdf
 pytesseract
 firebase-admin
+Pillow
+cachetools
+pdf2image
 pytest
+pytest-mock
 httpx
 python-multipart
