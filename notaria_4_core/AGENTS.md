@@ -32,3 +32,11 @@ This file outlines the strict architectural and fiscal constraints for the Notar
 ## 4. Code Structure
 - **Backend:** Python 3.11 with FastAPI.
 - **Libraries:** `satcfdi` (XML signing), `spacy` (NLP), `pytesseract` (OCR).
+
+## 5. Frontend UI Generation with Google Stitch
+- The frontend (React + Tailwind) is designed to be generated using **Google Stitch** (stitch.withgoogle.com) via the Model Context Protocol (MCP).
+- **Process:**
+  1. Obtain your Stitch API Key.
+  2. Run `./frontend/setup_stitch_mcp.sh <API_KEY>` to connect your local MCP-compatible agent (e.g., Claude Code) to Stitch.
+  3. Use the detailed prompt provided in `frontend/STITCH_PROMPT.md` within the Stitch platform to generate the UI design (or have the agent fetch it).
+  4. The generated UI acts as the source of truth for the Notaría 4 dashboard, including the critical "Human-in-the-Loop" validation screen.
