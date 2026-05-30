@@ -1,6 +1,14 @@
 import re
 import unicodedata
+import time
 from decimal import Decimal, getcontext, ROUND_HALF_UP
+
+try:
+    import firebase_admin
+    from firebase_admin import remote_config
+except ImportError:
+    firebase_admin = None
+    remote_config = None
 
 # Set strict decimal precision
 getcontext().prec = 50
@@ -69,11 +77,51 @@ def sanitize_name(name: str) -> str:
     # Basic uppercase conversion as SAT usually expects uppercase
     return clean_name.upper()
 
-def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = Decimal("0.03")) -> Decimal:
+_ISAI_RATE_CACHE = None
+_ISAI_RATE_CACHE_TTL = 3600
+_ISAI_RATE_CACHE_TIMESTAMP = 0
+
+def get_remote_config_sync(param_name: str) -> str:
+    """
+    Fetches the remote config parameter value synchronously.
+    """
+    if firebase_admin is None or remote_config is None:
+        return None
+    try:
+        template = remote_config.get_remote_config()
+        if template and template.parameters and param_name in template.parameters:
+            param = template.parameters[param_name]
+            # Handle different parameter types (e.g. RemoteConfigParameterValue)
+            if hasattr(param, 'default_value') and hasattr(param.default_value, 'value'):
+                return param.default_value.value
+        return None
+    except Exception as e:
+        # Avoid crashing if remote config fetching fails
+        print(f"Error fetching remote config: {e}")
+        return None
+
+def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = None) -> Decimal:
     """
     Calculates ISAI for Manzanillo.
     Formula: Max(Price, Cadastral) * Rate
+    Dynamically fetches rate from Firebase Remote Config if rate is omitted.
     """
+    global _ISAI_RATE_CACHE, _ISAI_RATE_CACHE_TIMESTAMP
+
+    if rate is None:
+        current_time = time.time()
+        if _ISAI_RATE_CACHE is None or (current_time - _ISAI_RATE_CACHE_TIMESTAMP) > _ISAI_RATE_CACHE_TTL:
+            config_val = get_remote_config_sync("tasa_isai_manzanillo")
+            if config_val is not None:
+                try:
+                    _ISAI_RATE_CACHE = Decimal(str(config_val))
+                except Exception:
+                    _ISAI_RATE_CACHE = Decimal("0.03")
+            else:
+                _ISAI_RATE_CACHE = Decimal("0.03")
+            _ISAI_RATE_CACHE_TIMESTAMP = current_time
+        rate = _ISAI_RATE_CACHE
+
     base = max(operation_price, cadastral_value)
     isai = base * rate
     # Standard rounding to 2 decimals for currency
