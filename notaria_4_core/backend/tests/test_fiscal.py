@@ -1,6 +1,19 @@
+import sys
+from unittest.mock import patch, MagicMock
+
+# Patch firebase_admin.firestore before any other imports
+firestore_mock = MagicMock()
+sys.modules['firebase_admin.firestore'] = firestore_mock
+
 from decimal import Decimal
 import pytest
+import notaria_4_core.backend.lib.fiscal_engine as fiscal_engine
 from notaria_4_core.backend.lib.fiscal_engine import sanitize_name, validate_copropiedad, calculate_retentions, calculate_isai_manzanillo, validate_postal_code
+
+@pytest.fixture(autouse=True)
+def mock_firebase_init():
+    with patch('firebase_admin.initialize_app'), patch('firebase_admin.get_app'):
+        yield
 
 def test_sanitize_name():
     # Test removal of S.A. DE C.V.
@@ -42,7 +55,11 @@ def test_calculate_retentions_fisica():
     assert ret["is_moral"] is False
     assert ret["isr"] == Decimal("0.00")
 
-def test_isai_manzanillo():
+@patch("notaria_4_core.backend.lib.fiscal_engine.get_remote_config_sync")
+def test_isai_manzanillo(mock_get_remote_config):
+    fiscal_engine._ISAI_RATE_CACHE = None
+    mock_get_remote_config.return_value = Decimal("0.03")
+
     price = Decimal("1000000.00")
     cadastral = Decimal("500000.00")
     # Max is 1M. Rate 0.03 -> 30,000

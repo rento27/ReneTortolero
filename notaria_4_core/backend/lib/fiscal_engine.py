@@ -1,6 +1,14 @@
 import re
 import unicodedata
 from decimal import Decimal, getcontext, ROUND_HALF_UP
+import time
+
+try:
+    import firebase_admin
+    from firebase_admin import remote_config
+except ImportError:
+    firebase_admin = None
+    remote_config = None
 
 # Set strict decimal precision
 getcontext().prec = 50
@@ -69,11 +77,37 @@ def sanitize_name(name: str) -> str:
     # Basic uppercase conversion as SAT usually expects uppercase
     return clean_name.upper()
 
-def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = Decimal("0.03")) -> Decimal:
+_ISAI_RATE_CACHE = None
+_ISAI_RATE_CACHE_TTL = 3600
+_ISAI_RATE_LAST_FETCH = 0
+
+def get_remote_config_sync() -> Decimal:
+    global _ISAI_RATE_CACHE, _ISAI_RATE_LAST_FETCH
+
+    current_time = time.time()
+    if _ISAI_RATE_CACHE is not None and (current_time - _ISAI_RATE_LAST_FETCH) < _ISAI_RATE_CACHE_TTL:
+        return _ISAI_RATE_CACHE
+
+    if not remote_config:
+        return Decimal("0.03")
+
+    try:
+        template = remote_config.get_remote_config()
+        rate_str = template.parameters.get('tasa_isai_manzanillo').default_value.value
+        _ISAI_RATE_CACHE = Decimal(rate_str)
+        _ISAI_RATE_LAST_FETCH = current_time
+        return _ISAI_RATE_CACHE
+    except Exception:
+        return Decimal("0.03")
+
+def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = None) -> Decimal:
     """
     Calculates ISAI for Manzanillo.
     Formula: Max(Price, Cadastral) * Rate
     """
+    if rate is None:
+        rate = get_remote_config_sync()
+
     base = max(operation_price, cadastral_value)
     isai = base * rate
     # Standard rounding to 2 decimals for currency
