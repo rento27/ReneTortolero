@@ -1,5 +1,12 @@
 from decimal import Decimal
 import pytest
+import sys
+from unittest.mock import patch, MagicMock
+
+# Setup mocked firestore module before importing fiscal_engine
+mock_firestore = MagicMock()
+sys.modules['firebase_admin.firestore'] = mock_firestore
+
 from notaria_4_core.backend.lib.fiscal_engine import sanitize_name, validate_copropiedad, calculate_retentions, calculate_isai_manzanillo, validate_postal_code
 
 def test_sanitize_name():
@@ -42,7 +49,19 @@ def test_calculate_retentions_fisica():
     assert ret["is_moral"] is False
     assert ret["isr"] == Decimal("0.00")
 
-def test_isai_manzanillo():
+@patch('notaria_4_core.backend.lib.fiscal_engine.get_remote_config_sync')
+def test_isai_manzanillo(mock_get_remote_config_sync):
+    import notaria_4_core.backend.lib.fiscal_engine as fiscal_engine
+    # Clear cache
+    fiscal_engine._ISAI_RATE_CACHE = None
+
+    # Mock template with rate 0.03
+    mock_template = MagicMock()
+    mock_param = MagicMock()
+    mock_param.default_value.value = "0.03"
+    mock_template.parameters = {"tasa_isai_manzanillo": mock_param}
+    mock_get_remote_config_sync.return_value = mock_template
+
     price = Decimal("1000000.00")
     cadastral = Decimal("500000.00")
     # Max is 1M. Rate 0.03 -> 30,000
@@ -51,13 +70,31 @@ def test_isai_manzanillo():
     # Cadastral higher
     assert calculate_isai_manzanillo(price, Decimal("2000000.00")) == Decimal("60000.00")
 
-def test_validate_postal_code():
+@patch('firebase_admin.get_app')
+@patch('firebase_admin.initialize_app')
+def test_validate_postal_code(mock_init, mock_get_app):
+    import notaria_4_core.backend.lib.fiscal_engine as fiscal_engine
+
+    mock_db = MagicMock()
+    mock_firestore.client.return_value = mock_db
+
+    # Mock known CP
+    mock_doc = MagicMock()
+    mock_doc.exists = True
+    mock_doc.to_dict.return_value = {'estado': 'COL'}
+    mock_db.collection.return_value.document.return_value.get.return_value = mock_doc
+
     # Known CP
-    assert validate_postal_code("28200") is True
-    assert validate_postal_code("28200", "COL") is True
+    assert fiscal_engine.validate_postal_code("28200") is True
+    assert fiscal_engine.validate_postal_code("28200", "COL") is True
 
     # Wrong State
-    assert validate_postal_code("28200", "JAL") is False
+    assert fiscal_engine.validate_postal_code("28200", "JAL") is False
+
+    # Mock unknown CP
+    mock_doc_missing = MagicMock()
+    mock_doc_missing.exists = False
+    mock_db.collection.return_value.document.return_value.get.return_value = mock_doc_missing
 
     # Unknown CP
-    assert validate_postal_code("99999") is False
+    assert fiscal_engine.validate_postal_code("99999") is False
