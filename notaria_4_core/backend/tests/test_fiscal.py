@@ -1,5 +1,16 @@
 from decimal import Decimal
 import pytest
+import sys
+from unittest.mock import patch, MagicMock
+
+# System-wide patch for firebase_admin.firestore before any other imports that might depend on it
+patch('firebase_admin.firestore', create=True).start()
+
+# Mock firebase_admin initialization
+patch('firebase_admin.initialize_app').start()
+patch('firebase_admin.get_app').start()
+
+import notaria_4_core.backend.lib.fiscal_engine as fiscal_engine
 from notaria_4_core.backend.lib.fiscal_engine import sanitize_name, validate_copropiedad, calculate_retentions, calculate_isai_manzanillo, validate_postal_code
 
 def test_sanitize_name():
@@ -42,22 +53,52 @@ def test_calculate_retentions_fisica():
     assert ret["is_moral"] is False
     assert ret["isr"] == Decimal("0.00")
 
-def test_isai_manzanillo():
+@patch("notaria_4_core.backend.lib.fiscal_engine.get_remote_config_sync")
+def test_isai_manzanillo(mock_get_remote_config):
+    # Clear cache before testing
+    fiscal_engine._ISAI_RATE_CACHE = None
+
+    # Mock the remote config response
+    mock_template = MagicMock()
+    mock_template.parameters.get.return_value.default_value.value = "0.03"
+    mock_get_remote_config.return_value = mock_template
+
     price = Decimal("1000000.00")
     cadastral = Decimal("500000.00")
     # Max is 1M. Rate 0.03 -> 30,000
     assert calculate_isai_manzanillo(price, cadastral) == Decimal("30000.00")
 
-    # Cadastral higher
+    # Clear cache to test fallback when get_remote_config_sync fails
+    fiscal_engine._ISAI_RATE_CACHE = None
+    mock_get_remote_config.side_effect = Exception("Firebase Error")
+
+    # Max is 2M. Default Rate 0.03 -> 60,000
     assert calculate_isai_manzanillo(price, Decimal("2000000.00")) == Decimal("60000.00")
 
-def test_validate_postal_code():
-    # Known CP
+@patch("notaria_4_core.backend.lib.fiscal_engine.firestore.client")
+def test_validate_postal_code(mock_firestore_client):
+    # Mock Firestore Client setup
+    mock_db = MagicMock()
+    mock_firestore_client.return_value = mock_db
+
+    mock_collection = MagicMock()
+    mock_db.collection.return_value = mock_collection
+
+    mock_doc_ref = MagicMock()
+    mock_collection.document.return_value = mock_doc_ref
+
+    mock_doc = MagicMock()
+    mock_doc_ref.get.return_value = mock_doc
+
+    # Case 1: Known CP, correct state
+    mock_doc.exists = True
+    mock_doc.to_dict.return_value = {"estado": "COL"}
     assert validate_postal_code("28200") is True
     assert validate_postal_code("28200", "COL") is True
 
-    # Wrong State
+    # Case 2: Wrong State
     assert validate_postal_code("28200", "JAL") is False
 
-    # Unknown CP
+    # Case 3: Unknown CP
+    mock_doc.exists = False
     assert validate_postal_code("99999") is False
