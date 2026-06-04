@@ -1,9 +1,17 @@
 import re
 import unicodedata
+import time
 from decimal import Decimal, getcontext, ROUND_HALF_UP
 
 # Set strict decimal precision
 getcontext().prec = 50
+
+# Firebase imports
+try:
+    import firebase_admin
+    from firebase_admin import remote_config
+except ImportError:
+    remote_config = None
 
 # Corporate Regimes to strip (Regex pattern)
 # Matches common endings like S.A. DE C.V., S.C., etc., allowing for optional punctuation and casing.
@@ -69,11 +77,45 @@ def sanitize_name(name: str) -> str:
     # Basic uppercase conversion as SAT usually expects uppercase
     return clean_name.upper()
 
-def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = Decimal("0.03")) -> Decimal:
+_ISAI_RATE_CACHE = None
+_ISAI_RATE_CACHE_TTL = 3600
+
+def get_remote_config_sync():
+    """
+    Synchronously fetches the remote config from Firebase.
+    """
+    if remote_config:
+        return remote_config.get_remote_config()
+    return None
+
+def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = None) -> Decimal:
     """
     Calculates ISAI for Manzanillo.
     Formula: Max(Price, Cadastral) * Rate
+    Default rate is 3% or fetched from remote config.
     """
+    global _ISAI_RATE_CACHE
+
+    if rate is None:
+        if _ISAI_RATE_CACHE is not None and time.time() < _ISAI_RATE_CACHE['expires_at']:
+            rate = _ISAI_RATE_CACHE['rate']
+        else:
+            try:
+                template = get_remote_config_sync()
+                if template and 'tasa_isai_manzanillo' in template.parameters:
+                    # Get default value from parameter
+                    val = template.parameters['tasa_isai_manzanillo'].default_value.value
+                    rate = Decimal(str(val))
+                else:
+                    rate = Decimal("0.03")
+            except Exception:
+                rate = Decimal("0.03")
+
+            _ISAI_RATE_CACHE = {
+                'rate': rate,
+                'expires_at': time.time() + _ISAI_RATE_CACHE_TTL
+            }
+
     base = max(operation_price, cadastral_value)
     isai = base * rate
     # Standard rounding to 2 decimals for currency

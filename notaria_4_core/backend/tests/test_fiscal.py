@@ -1,6 +1,14 @@
 from decimal import Decimal
 import pytest
+import sys
+from unittest.mock import patch, MagicMock
+
+# Mock firebase_admin for tests
+mock_firestore = MagicMock()
+sys.modules['firebase_admin.firestore'] = mock_firestore
+
 from notaria_4_core.backend.lib.fiscal_engine import sanitize_name, validate_copropiedad, calculate_retentions, calculate_isai_manzanillo, validate_postal_code
+import notaria_4_core.backend.lib.fiscal_engine as fiscal_engine
 
 def test_sanitize_name():
     # Test removal of S.A. DE C.V.
@@ -42,16 +50,35 @@ def test_calculate_retentions_fisica():
     assert ret["is_moral"] is False
     assert ret["isr"] == Decimal("0.00")
 
-def test_isai_manzanillo():
+@patch("notaria_4_core.backend.lib.fiscal_engine.get_remote_config_sync")
+def test_isai_manzanillo(mock_get_remote_config):
+    # Clear cache before test
+    fiscal_engine._ISAI_RATE_CACHE = None
+
+    # Mock template setup
+    mock_template = MagicMock()
+    mock_param = MagicMock()
+    mock_param.default_value.value = "0.04"
+    mock_template.parameters = {'tasa_isai_manzanillo': mock_param}
+    mock_get_remote_config.return_value = mock_template
+
     price = Decimal("1000000.00")
     cadastral = Decimal("500000.00")
-    # Max is 1M. Rate 0.03 -> 30,000
+    # Max is 1M. Rate 0.04 -> 40,000
+    assert calculate_isai_manzanillo(price, cadastral) == Decimal("40000.00")
+
+    # Clear cache for default fallback test
+    fiscal_engine._ISAI_RATE_CACHE = None
+    mock_get_remote_config.return_value = None
+
+    # Max is 1M. Rate 0.03 -> 30,000 (default)
     assert calculate_isai_manzanillo(price, cadastral) == Decimal("30000.00")
 
     # Cadastral higher
     assert calculate_isai_manzanillo(price, Decimal("2000000.00")) == Decimal("60000.00")
 
-def test_validate_postal_code():
+@patch('firebase_admin.firestore', create=True)
+def test_validate_postal_code(mock_fs):
     # Known CP
     assert validate_postal_code("28200") is True
     assert validate_postal_code("28200", "COL") is True
