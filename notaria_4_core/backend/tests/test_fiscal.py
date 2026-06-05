@@ -1,6 +1,17 @@
 from decimal import Decimal
 import pytest
+import sys
+from unittest.mock import patch, MagicMock
+
+# Mock firebase_admin before importing fiscal_engine
+firebase_admin_mock = MagicMock()
+firestore_mock = MagicMock()
+firebase_admin_mock.firestore = firestore_mock
+sys.modules['firebase_admin'] = firebase_admin_mock
+sys.modules['firebase_admin.firestore'] = firestore_mock
+
 from notaria_4_core.backend.lib.fiscal_engine import sanitize_name, validate_copropiedad, calculate_retentions, calculate_isai_manzanillo, validate_postal_code
+import notaria_4_core.backend.lib.fiscal_engine as fiscal_engine
 
 def test_sanitize_name():
     # Test removal of S.A. DE C.V.
@@ -42,7 +53,11 @@ def test_calculate_retentions_fisica():
     assert ret["is_moral"] is False
     assert ret["isr"] == Decimal("0.00")
 
-def test_isai_manzanillo():
+@patch("notaria_4_core.backend.lib.fiscal_engine.get_remote_config_sync")
+def test_isai_manzanillo(mock_get_remote_config):
+    fiscal_engine._ISAI_RATE_CACHE = None
+    mock_get_remote_config.return_value = Decimal("0.03")
+
     price = Decimal("1000000.00")
     cadastral = Decimal("500000.00")
     # Max is 1M. Rate 0.03 -> 30,000
@@ -51,7 +66,24 @@ def test_isai_manzanillo():
     # Cadastral higher
     assert calculate_isai_manzanillo(price, Decimal("2000000.00")) == Decimal("60000.00")
 
-def test_validate_postal_code():
+@patch("notaria_4_core.backend.lib.fiscal_engine.firestore.client")
+def test_validate_postal_code(mock_firestore_client):
+    mock_db = MagicMock()
+    mock_doc_ref = MagicMock()
+    mock_doc = MagicMock()
+
+    mock_firestore_client.return_value = mock_db
+    mock_db.collection.return_value.document.return_value = mock_doc_ref
+    mock_doc_ref.get.return_value = mock_doc
+
+    mock_doc.exists = True
+    mock_doc.to_dict.return_value = {
+        "28200": "COL",
+        "28218": "COL",
+        "28230": "COL",
+        "06600": "CMX"
+    }
+
     # Known CP
     assert validate_postal_code("28200") is True
     assert validate_postal_code("28200", "COL") is True
@@ -61,3 +93,7 @@ def test_validate_postal_code():
 
     # Unknown CP
     assert validate_postal_code("99999") is False
+
+    # Missing Doc
+    mock_doc.exists = False
+    assert validate_postal_code("28200") is False
