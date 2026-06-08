@@ -1,6 +1,14 @@
 import re
 import unicodedata
+import time
 from decimal import Decimal, getcontext, ROUND_HALF_UP
+
+try:
+    import firebase_admin
+    from firebase_admin import remote_config
+except ImportError:
+    firebase_admin = None
+    remote_config = None
 
 # Set strict decimal precision
 getcontext().prec = 50
@@ -19,6 +27,29 @@ ISR_RETENTION_RATE = Decimal("0.10")
 # Or calculated as (Subtotal * 0.16) * (2/3)
 # The prompt says "Matemáticamente, esto equivale a una tasa del 10.6667%".
 IVA_RETENTION_RATE_DIRECT = Decimal("0.106667")
+
+_ISAI_RATE_CACHE = None
+_ISAI_RATE_CACHE_TTL = 3600
+
+def get_remote_config_sync():
+    """
+    Fetches the remote config template synchronously.
+    """
+    if not firebase_admin or not remote_config:
+        return None
+    try:
+        # Check if app is initialized
+        try:
+            firebase_admin.get_app()
+        except ValueError:
+            # For testing, initialization should happen in tests/main
+            return None
+
+        template = remote_config.get_server_template()
+        return template
+    except Exception as e:
+        print(f"Error fetching remote config: {e}")
+        return None
 
 # Stub for Postal Code Catalog (Manzanillo samples)
 # In production, this would be loaded from Firestore/Cache
@@ -69,11 +100,34 @@ def sanitize_name(name: str) -> str:
     # Basic uppercase conversion as SAT usually expects uppercase
     return clean_name.upper()
 
-def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = Decimal("0.03")) -> Decimal:
+def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = None) -> Decimal:
     """
     Calculates ISAI for Manzanillo.
     Formula: Max(Price, Cadastral) * Rate
     """
+    global _ISAI_RATE_CACHE
+
+    if rate is None:
+        current_time = time.time()
+        # Use cache if valid
+        if _ISAI_RATE_CACHE is not None and (current_time - _ISAI_RATE_CACHE.get('timestamp', 0)) < _ISAI_RATE_CACHE_TTL:
+            rate = _ISAI_RATE_CACHE['rate']
+        else:
+            rate = Decimal("0.03") # default
+            template = get_remote_config_sync()
+            if template and 'tasa_isai_manzanillo' in template.parameters:
+                try:
+                    param_val = template.parameters['tasa_isai_manzanillo'].default_value.value
+                    if param_val:
+                        rate = Decimal(str(param_val))
+                except Exception as e:
+                    print(f"Error parsing tasa_isai_manzanillo: {e}")
+
+            _ISAI_RATE_CACHE = {
+                'rate': rate,
+                'timestamp': current_time
+            }
+
     base = max(operation_price, cadastral_value)
     isai = base * rate
     # Standard rounding to 2 decimals for currency
@@ -99,10 +153,8 @@ def calculate_retentions(rfc_receptor: str, subtotal: Decimal, iva_rate: Decimal
         retentions["isr"] = (subtotal * ISR_RETENTION_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
         # IVA Retention: 2/3 of the IVA amount
-        # IVA Amount = Subtotal * iva_rate
-        # Ret = IVA Amount * (2/3)
-        iva_amount = subtotal * iva_rate
-        ret_iva = iva_amount * (Decimal("2") / Decimal("3"))
+        # Matemáticamente, esto equivale a una tasa del 10.6667%
+        ret_iva = subtotal * IVA_RETENTION_RATE_DIRECT
         retentions["iva"] = ret_iva.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     return retentions
