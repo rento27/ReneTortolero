@@ -65,7 +65,7 @@ def generate_signed_xml(invoice_data: dict) -> bytes:
             # Retenciones (If applicable for Persona Moral)
             if retentions['is_moral']:
                 ret_isr = base * Decimal("0.10")
-                ret_iva = (base * Decimal("0.16")) * (Decimal("2") / Decimal("3"))
+                ret_iva = base * Decimal("0.106667")
                 retenciones = [
                     {
                         'Base': base,
