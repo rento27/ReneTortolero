@@ -1,6 +1,8 @@
 from decimal import Decimal
 import pytest
+import notaria_4_core.backend.lib.fiscal_engine as fiscal_engine
 from notaria_4_core.backend.lib.fiscal_engine import sanitize_name, validate_copropiedad, calculate_retentions, calculate_isai_manzanillo, validate_postal_code
+from unittest.mock import patch
 
 def test_sanitize_name():
     # Test removal of S.A. DE C.V.
@@ -42,7 +44,11 @@ def test_calculate_retentions_fisica():
     assert ret["is_moral"] is False
     assert ret["isr"] == Decimal("0.00")
 
-def test_isai_manzanillo():
+@patch("notaria_4_core.backend.lib.fiscal_engine.get_remote_config_sync")
+def test_isai_manzanillo(mock_get_remote_config_sync):
+    mock_get_remote_config_sync.return_value = Decimal("0.03")
+    fiscal_engine._ISAI_RATE_CACHE = None
+
     price = Decimal("1000000.00")
     cadastral = Decimal("500000.00")
     # Max is 1M. Rate 0.03 -> 30,000
@@ -50,6 +56,9 @@ def test_isai_manzanillo():
 
     # Cadastral higher
     assert calculate_isai_manzanillo(price, Decimal("2000000.00")) == Decimal("60000.00")
+
+    mock_get_remote_config_sync.return_value = Decimal("0.04")
+    assert calculate_isai_manzanillo(price, cadastral) == Decimal("40000.00")
 
 def test_validate_postal_code():
     # Known CP
