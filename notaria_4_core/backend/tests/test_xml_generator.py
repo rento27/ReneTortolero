@@ -3,8 +3,15 @@ import pytest
 from decimal import Decimal
 from notaria_4_core.backend.lib.xml_generator import generate_signed_xml
 
-def test_generate_xml():
-    os.environ["MOCK_SIGNER"] = "1"
+from unittest.mock import patch
+
+@patch('notaria_4_core.backend.lib.xml_generator.load_signer_from_secret_manager')
+@patch('satcfdi.create.cfd.cfdi40.Comprobante.sign')
+@patch('satcfdi.create.cfd.cfdi40.Comprobante.xml_bytes')
+def test_generate_xml(mock_xml_bytes, mock_sign, mock_load_signer):
+    mock_load_signer.return_value = "MockedSigner"
+    mock_xml_bytes.return_value = b"<mock>xml</mock>"
+
     data = {
         'receptor': {
             'rfc': 'ABC123456T12',
@@ -29,3 +36,7 @@ def test_generate_xml():
 
     xml = generate_signed_xml(data)
     assert xml is not None
+    assert xml == b"<mock>xml</mock>"
+    mock_load_signer.assert_called_once()
+    mock_sign.assert_called_once_with("MockedSigner")
+    mock_xml_bytes.assert_called_once()

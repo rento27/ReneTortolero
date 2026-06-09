@@ -21,10 +21,14 @@ except ImportError:
 try:
     import spacy
     try:
-        nlp = spacy.load("es_core_news_sm")
-    except Exception as e:
-        logger.warning(f"spaCy model 'es_core_news_sm' not found. NLP features disabled. {e}")
-        nlp = None
+        nlp = spacy.load("ner_notaria")
+    except Exception as e1:
+        logger.warning(f"Custom spaCy model 'ner_notaria' not found. Falling back to 'es_core_news_lg'. {e1}")
+        try:
+            nlp = spacy.load("es_core_news_lg")
+        except Exception as e2:
+            logger.warning(f"Fallback spaCy model 'es_core_news_lg' not found. NLP features disabled. {e2}")
+            nlp = None
 except ImportError:
     spacy = None
     nlp = None
@@ -69,7 +73,11 @@ def extract_structured_data(text: str) -> dict:
     """
     data = {
         "escritura": None,
-        "rfcs": []
+        "rfcs": [],
+        "vendedores": [],
+        "adquirientes": [],
+        "inmuebles": [],
+        "montos": []
     }
 
     # Extract Escritura using deterministic regex
