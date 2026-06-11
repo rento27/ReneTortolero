@@ -59,6 +59,7 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
             notariospublicos10.DescInmueble(
                 tipo_inmueble=inmueble.tipo_inmueble,
                 calle=inmueble.calle,
+                municipio=inmueble.municipio,
                 estado=inmueble.estado,
                 pais=inmueble.pais,
                 codigo_postal=inmueble.codigo_postal
@@ -70,10 +71,13 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
     un_adquiriente = None
     adquiriente_sum_percentages = Decimal("0.0")
 
+    copro_soc_conyugal_e_adq = 'No'
     for adq in complemento_model.datos_adquirientes:
+        if adq.copro_soc_conyugal_e == 'Si':
+            copro_soc_conyugal_e_adq = 'Si'
         nombre, paterno, materno = split_name(adq.nombre, adq.apellido_paterno, adq.apellido_materno)
         if adq.copro_soc_conyugal_e == 'Si':
-            # Create DatosAdquirienteCopSC object
+            # Create DatosAdquirientesCopSC object
             adquiriente_cop_sc_list.append(
                 notariospublicos10.DatosAdquirienteCopSC(
                     nombre=nombre,
@@ -100,10 +104,12 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
 
     if adquiriente_cop_sc_list:
         datos_adquiriente = notariospublicos10.DatosAdquiriente(
+            copro_soc_conyugal_e=copro_soc_conyugal_e_adq,
             datos_adquirientes_cop_sc=adquiriente_cop_sc_list
         )
     else:
         datos_adquiriente = notariospublicos10.DatosAdquiriente(
+            copro_soc_conyugal_e=copro_soc_conyugal_e_adq,
             datos_un_adquiriente=un_adquiriente
         )
 
@@ -112,14 +118,17 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
     un_enajenante = None
     enajenante_sum_percentages = Decimal("0.0")
 
+    copro_soc_conyugal_e_ena = 'No'
     for ena in complemento_model.datos_enajenantes:
         if not ena.curp:
             raise ValueError("CURP is mandatory for DatosEnajenante")
 
+        if ena.copro_soc_conyugal_e == 'Si':
+            copro_soc_conyugal_e_ena = 'Si'
         nombre, paterno, materno = split_name(ena.nombre, ena.apellido_paterno, ena.apellido_materno)
         if ena.copro_soc_conyugal_e == 'Si':
             enajenante_cop_sc_list.append(
-                notariospublicos10.DatosEnajenantesCopSC(
+                notariospublicos10.DatosEnajenanteCopSC(
                     nombre=nombre,
                     apellido_paterno=paterno,
                     apellido_materno=materno,
@@ -144,10 +153,12 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
 
     if enajenante_cop_sc_list:
         datos_enajenante = notariospublicos10.DatosEnajenante(
+            copro_soc_conyugal_e=copro_soc_conyugal_e_ena,
             datos_enajenantes_cop_sc=enajenante_cop_sc_list
         )
     else:
         datos_enajenante = notariospublicos10.DatosEnajenante(
+            copro_soc_conyugal_e=copro_soc_conyugal_e_ena,
             datos_un_enajenante=un_enajenante
         )
 
