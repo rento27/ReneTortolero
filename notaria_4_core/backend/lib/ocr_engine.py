@@ -21,10 +21,13 @@ except ImportError:
 try:
     import spacy
     try:
-        nlp = spacy.load("es_core_news_sm")
-    except Exception as e:
-        logger.warning(f"spaCy model 'es_core_news_sm' not found. NLP features disabled. {e}")
-        nlp = None
+        nlp = spacy.load("ner_notaria")
+    except Exception:
+        try:
+            nlp = spacy.load("es_core_news_lg")
+        except Exception as e:
+            logger.warning(f"spaCy models 'ner_notaria' and 'es_core_news_lg' not found. NLP features disabled. {e}")
+            nlp = None
 except ImportError:
     spacy = None
     nlp = None
@@ -69,7 +72,11 @@ def extract_structured_data(text: str) -> dict:
     """
     data = {
         "escritura": None,
-        "rfcs": []
+        "rfcs": [],
+        "vendedores": [],
+        "adquirientes": [],
+        "inmuebles": [],
+        "montos": []
     }
 
     # Extract Escritura using deterministic regex
@@ -87,5 +94,18 @@ def extract_structured_data(text: str) -> dict:
         # doc = nlp(text)
         # NLP logic to extract Adquiriente, Enajenante, Inmueble, etc.
         pass
+
+    # Explicit string matching fallback
+    if not data["vendedores"]:
+        # Find everything after COMPARECE
+        match = re.search(r"COMPARECE\s+([A-Z\s]+?)(?:,|\.)", text)
+        if match:
+            data["vendedores"].append(match.group(1).strip())
+
+    if not data["adquirientes"]:
+        # Find everything after COMPRA
+        match = re.search(r"COMPRA\s+([A-Z\s]+?)(?:,|\.)", text)
+        if match:
+            data["adquirientes"].append(match.group(1).strip())
 
     return data

@@ -1,6 +1,9 @@
 import re
 import unicodedata
 from decimal import Decimal, getcontext, ROUND_HALF_UP
+import firebase_admin
+from firebase_admin import firestore, remote_config
+import time
 
 # Set strict decimal precision
 getcontext().prec = 50
@@ -20,26 +23,33 @@ ISR_RETENTION_RATE = Decimal("0.10")
 # The prompt says "Matemáticamente, esto equivale a una tasa del 10.6667%".
 IVA_RETENTION_RATE_DIRECT = Decimal("0.106667")
 
-# Stub for Postal Code Catalog (Manzanillo samples)
-# In production, this would be loaded from Firestore/Cache
-VALID_POSTAL_CODES = {
-    "28200": "COL",
-    "28218": "COL",
-    "28230": "COL",
-    "06600": "CMX" # Mexico City sample
-}
+_ISAI_RATE_CACHE = None
+_ISAI_RATE_CACHE_TTL = 3600
+_ISAI_RATE_CACHE_TIME = 0
+
+def get_remote_config_sync():
+    template = remote_config.get_server_template()
+    if 'tasa_isai_manzanillo' in template.parameters:
+        return template.parameters['tasa_isai_manzanillo'].default_value.value
+    return "0.03"
 
 def validate_postal_code(cp: str, expected_state: str = None) -> bool:
     """
-    Validates the postal code against the authorized catalog.
+    Validates the postal code against the authorized catalog in Firestore.
     If expected_state (e.g., 'COL') is provided, ensures the CP belongs to that state.
     """
-    if cp not in VALID_POSTAL_CODES:
-        # In this stub, we reject unknown CPs.
-        # In production, this would reject CPs not found in the full SAT catalog.
+    db = firestore.client()
+    docs = db.collection('catalogos_sat').where('c_CodigoPostal', '==', cp).limit(1).stream()
+
+    doc_data = None
+    for doc in docs:
+        doc_data = doc.to_dict()
+        break
+
+    if not doc_data:
         return False
 
-    if expected_state and VALID_POSTAL_CODES[cp] != expected_state:
+    if expected_state and doc_data.get('c_Estado') != expected_state:
         return False
 
     return True
@@ -69,11 +79,24 @@ def sanitize_name(name: str) -> str:
     # Basic uppercase conversion as SAT usually expects uppercase
     return clean_name.upper()
 
-def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = Decimal("0.03")) -> Decimal:
+def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = None) -> Decimal:
     """
     Calculates ISAI for Manzanillo.
     Formula: Max(Price, Cadastral) * Rate
     """
+    global _ISAI_RATE_CACHE, _ISAI_RATE_CACHE_TIME
+
+    if rate is None:
+        current_time = time.time()
+        if _ISAI_RATE_CACHE is None or (current_time - _ISAI_RATE_CACHE_TIME) > _ISAI_RATE_CACHE_TTL:
+            try:
+                rate_str = get_remote_config_sync()
+                _ISAI_RATE_CACHE = Decimal(rate_str)
+                _ISAI_RATE_CACHE_TIME = current_time
+            except Exception:
+                _ISAI_RATE_CACHE = Decimal("0.03")
+        rate = _ISAI_RATE_CACHE
+
     base = max(operation_price, cadastral_value)
     isai = base * rate
     # Standard rounding to 2 decimals for currency

@@ -1,5 +1,13 @@
 from decimal import Decimal
 import pytest
+import sys
+from unittest.mock import patch, MagicMock
+
+# Patch firebase_admin.firestore system-wide
+mock_firestore = MagicMock()
+sys.modules['firebase_admin.firestore'] = mock_firestore
+
+from notaria_4_core.backend.lib import fiscal_engine
 from notaria_4_core.backend.lib.fiscal_engine import sanitize_name, validate_copropiedad, calculate_retentions, calculate_isai_manzanillo, validate_postal_code
 
 def test_sanitize_name():
@@ -42,7 +50,11 @@ def test_calculate_retentions_fisica():
     assert ret["is_moral"] is False
     assert ret["isr"] == Decimal("0.00")
 
-def test_isai_manzanillo():
+@patch("notaria_4_core.backend.lib.fiscal_engine.get_remote_config_sync")
+def test_isai_manzanillo(mock_get_config):
+    fiscal_engine._ISAI_RATE_CACHE = None
+    mock_get_config.return_value = "0.03"
+
     price = Decimal("1000000.00")
     cadastral = Decimal("500000.00")
     # Max is 1M. Rate 0.03 -> 30,000
@@ -51,13 +63,30 @@ def test_isai_manzanillo():
     # Cadastral higher
     assert calculate_isai_manzanillo(price, Decimal("2000000.00")) == Decimal("60000.00")
 
-def test_validate_postal_code():
+@patch('firebase_admin.initialize_app')
+@patch('firebase_admin.get_app')
+@patch('notaria_4_core.backend.lib.fiscal_engine.firestore')
+def test_validate_postal_code(mock_firestore_local, mock_get_app, mock_init_app):
+    mock_db = MagicMock()
+    mock_firestore_local.client.return_value = mock_db
+
+    # Setup mock for valid CP 28200 COL
+    mock_doc = MagicMock()
+    mock_doc.to_dict.return_value = {"c_CodigoPostal": "28200", "c_Estado": "COL"}
+
+    mock_query = mock_db.collection.return_value.where.return_value.limit.return_value.stream
+
     # Known CP
+    mock_query.return_value = [mock_doc]
     assert validate_postal_code("28200") is True
+
+    mock_query.return_value = [mock_doc]
     assert validate_postal_code("28200", "COL") is True
 
     # Wrong State
+    mock_query.return_value = [mock_doc]
     assert validate_postal_code("28200", "JAL") is False
 
     # Unknown CP
+    mock_query.return_value = []
     assert validate_postal_code("99999") is False
