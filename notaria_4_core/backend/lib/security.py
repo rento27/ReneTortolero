@@ -17,11 +17,10 @@ logger = logging.getLogger(__name__)
 def load_signer_from_secret_manager() -> Optional['Signer']:
     """
     Safely retrieves CSD credentials from Google Secret Manager directly into memory.
-    If the `MOCK_SIGNER` environment variable is set (e.g., for testing), returns None.
     Returns None if retrieval fails or dependencies are missing.
     """
-    if os.environ.get("MOCK_SIGNER") == "1" or not Signer:
-        logger.info("MOCK_SIGNER is set or Signer is unavailable; returning None.")
+    if not Signer:
+        logger.error("Signer is unavailable; returning None.")
         return None
 
     if not secretmanager:
