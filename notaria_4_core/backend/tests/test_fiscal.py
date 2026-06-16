@@ -1,6 +1,10 @@
 from decimal import Decimal
 import pytest
+from unittest.mock import patch, MagicMock
+
+import firebase_admin
 from notaria_4_core.backend.lib.fiscal_engine import sanitize_name, validate_copropiedad, calculate_retentions, calculate_isai_manzanillo, validate_postal_code
+import notaria_4_core.backend.lib.fiscal_engine as fiscal_engine
 
 def test_sanitize_name():
     # Test removal of S.A. DE C.V.
@@ -42,7 +46,11 @@ def test_calculate_retentions_fisica():
     assert ret["is_moral"] is False
     assert ret["isr"] == Decimal("0.00")
 
-def test_isai_manzanillo():
+@patch("notaria_4_core.backend.lib.fiscal_engine.get_remote_config_sync")
+def test_isai_manzanillo(mock_get_remote_config):
+    fiscal_engine._ISAI_RATE_CACHE = None
+    mock_get_remote_config.return_value = Decimal("0.03")
+
     price = Decimal("1000000.00")
     cadastral = Decimal("500000.00")
     # Max is 1M. Rate 0.03 -> 30,000
@@ -51,13 +59,47 @@ def test_isai_manzanillo():
     # Cadastral higher
     assert calculate_isai_manzanillo(price, Decimal("2000000.00")) == Decimal("60000.00")
 
-def test_validate_postal_code():
-    # Known CP
-    assert validate_postal_code("28200") is True
-    assert validate_postal_code("28200", "COL") is True
+def make_firestore_postal_code_mock(exists: bool, cp: str = "28200", estado: str = "COL"):
+    mock_doc = MagicMock()
+    # If the document exists, the query loop will return it.
+    mock_doc.to_dict.return_value = {"c_CodigoPostal": cp, "estado": estado}
 
-    # Wrong State
-    assert validate_postal_code("28200", "JAL") is False
+    mock_limited_query = MagicMock()
+    # The return value of get() should be the list of documents
+    query_result = [mock_doc] if exists else []
+    mock_limited_query.get.return_value = query_result
 
-    # Unknown CP
-    assert validate_postal_code("99999") is False
+    mock_where = MagicMock()
+    mock_where.limit.return_value = mock_limited_query
+
+    mock_collection = MagicMock()
+    mock_collection.where.return_value = mock_where
+
+    mock_db = MagicMock()
+    mock_db.collection.return_value = mock_collection
+
+    return mock_db
+
+def test_validate_postal_code_valid_no_state():
+    with patch('notaria_4_core.backend.lib.fiscal_engine.firestore.client') as mock_firestore_client:
+        fiscal_engine.firebase_admin._apps = {"[DEFAULT]": True}
+        mock_firestore_client.return_value = make_firestore_postal_code_mock(exists=True, cp="28200", estado="COL")
+        assert validate_postal_code("28200") is True
+
+def test_validate_postal_code_valid_with_state():
+    with patch('notaria_4_core.backend.lib.fiscal_engine.firestore.client') as mock_firestore_client:
+        fiscal_engine.firebase_admin._apps = {"[DEFAULT]": True}
+        mock_firestore_client.return_value = make_firestore_postal_code_mock(exists=True, cp="28200", estado="COL")
+        assert validate_postal_code("28200", "COL") is True
+
+def test_validate_postal_code_wrong_state():
+    with patch('notaria_4_core.backend.lib.fiscal_engine.firestore.client') as mock_firestore_client:
+        fiscal_engine.firebase_admin._apps = {"[DEFAULT]": True}
+        mock_firestore_client.return_value = make_firestore_postal_code_mock(exists=True, cp="28200", estado="COL")
+        assert validate_postal_code("28200", "JAL") is False
+
+def test_validate_postal_code_unknown():
+    with patch('notaria_4_core.backend.lib.fiscal_engine.firestore.client') as mock_firestore_client:
+        fiscal_engine.firebase_admin._apps = {"[DEFAULT]": True}
+        mock_firestore_client.return_value = make_firestore_postal_code_mock(exists=False)
+        assert validate_postal_code("99999") is False
