@@ -169,3 +169,20 @@ def validate_copropiedad(percentages: list[Decimal]) -> bool:
     if total != Decimal("100.00"):
         raise ValueError(f"Sum of percentages must be 100.00%, got {total}")
     return True
+
+def validate_conceptos_objeto_imp(conceptos: list[dict]) -> bool:
+    """
+    Validates that the 'ObjetoImp' for 'HONORARIOS' is '02' and for 'SUPLIDOS'/'DERECHOS' is '01'.
+    Raises ValueError if validation fails.
+    """
+    for concepto in conceptos:
+        descripcion = concepto.get('descripcion', '').upper()
+        objeto_imp = concepto.get('objeto_imp')
+
+        if 'HONORARIOS' in descripcion and objeto_imp != '02':
+            raise ValueError(f"Concepto '{descripcion}' must have ObjetoImp '02'.")
+
+        if ('SUPLIDOS' in descripcion or 'DERECHOS' in descripcion) and objeto_imp != '01':
+            raise ValueError(f"Concepto '{descripcion}' must have ObjetoImp '01'.")
+
+    return True

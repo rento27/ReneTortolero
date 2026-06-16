@@ -105,3 +105,36 @@ def test_validate_postal_code(mock_get_app, mock_init_app, mock_firestore):
 
     # Unknown CP
     assert validate_postal_code("99999") is False
+
+from notaria_4_core.backend.lib.fiscal_engine import validate_conceptos_objeto_imp
+
+def test_validate_conceptos_objeto_imp():
+    # Valid concepts
+    valid_conceptos = [
+        {"descripcion": "Honorarios por escrituración", "objeto_imp": "02"},
+        {"descripcion": "Pago de derechos registrales", "objeto_imp": "01"},
+        {"descripcion": "Gastos suplidos", "objeto_imp": "01"},
+        {"descripcion": "Copias simples", "objeto_imp": "02"}
+    ]
+    assert validate_conceptos_objeto_imp(valid_conceptos) == True
+
+    # Invalid honorarios
+    invalid_honorarios = [
+        {"descripcion": "HONORARIOS POR SERVICIOS", "objeto_imp": "01"}
+    ]
+    with pytest.raises(ValueError):
+        validate_conceptos_objeto_imp(invalid_honorarios)
+
+    # Invalid suplidos
+    invalid_suplidos = [
+        {"descripcion": "GASTOS SUPLIDOS", "objeto_imp": "02"}
+    ]
+    with pytest.raises(ValueError):
+        validate_conceptos_objeto_imp(invalid_suplidos)
+
+    # Invalid derechos
+    invalid_derechos = [
+        {"descripcion": "DERECHOS DE INSCRIPCION", "objeto_imp": "02"}
+    ]
+    with pytest.raises(ValueError):
+        validate_conceptos_objeto_imp(invalid_derechos)
