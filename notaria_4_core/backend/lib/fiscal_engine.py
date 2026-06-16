@@ -1,6 +1,16 @@
 import re
 import unicodedata
+import time
 from decimal import Decimal, getcontext, ROUND_HALF_UP
+
+try:
+    import firebase_admin
+    from firebase_admin import remote_config
+    from firebase_admin import firestore
+except ImportError:
+    firebase_admin = None
+    remote_config = None
+    firestore = None
 
 # Set strict decimal precision
 getcontext().prec = 50
@@ -20,29 +30,27 @@ ISR_RETENTION_RATE = Decimal("0.10")
 # The prompt says "Matemáticamente, esto equivale a una tasa del 10.6667%".
 IVA_RETENTION_RATE_DIRECT = Decimal("0.106667")
 
-# Stub for Postal Code Catalog (Manzanillo samples)
-# In production, this would be loaded from Firestore/Cache
-VALID_POSTAL_CODES = {
-    "28200": "COL",
-    "28218": "COL",
-    "28230": "COL",
-    "06600": "CMX" # Mexico City sample
-}
-
 def validate_postal_code(cp: str, expected_state: str = None) -> bool:
     """
     Validates the postal code against the authorized catalog.
-    If expected_state (e.g., 'COL') is provided, ensures the CP belongs to that state.
+    Queries the 'catalogos_sat' collection in Firestore.
     """
-    if cp not in VALID_POSTAL_CODES:
-        # In this stub, we reject unknown CPs.
-        # In production, this would reject CPs not found in the full SAT catalog.
-        return False
+    if not firestore:
+        # Fallback if firestore is not available
+        VALID_POSTAL_CODES = {"28200": "COL", "28218": "COL", "28230": "COL", "06600": "CMX"}
+        if cp not in VALID_POSTAL_CODES:
+            return False
+        if expected_state and VALID_POSTAL_CODES[cp] != expected_state:
+            return False
+        return True
 
-    if expected_state and VALID_POSTAL_CODES[cp] != expected_state:
-        return False
+    db = firestore.client()
+    query = db.collection("catalogos_sat").where("c_CodigoPostal", "==", cp)
+    if expected_state:
+        query = query.where("c_Estado", "==", expected_state)
 
-    return True
+    docs = query.limit(1).get()
+    return len(docs) > 0
 
 def sanitize_name(name: str) -> str:
     """
@@ -69,11 +77,37 @@ def sanitize_name(name: str) -> str:
     # Basic uppercase conversion as SAT usually expects uppercase
     return clean_name.upper()
 
-def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = Decimal("0.03")) -> Decimal:
+_ISAI_RATE_CACHE = None
+_ISAI_RATE_CACHE_TTL = 3600
+_ISAI_RATE_CACHE_TIME = 0
+
+def get_remote_config_sync() -> Decimal:
+    global _ISAI_RATE_CACHE, _ISAI_RATE_CACHE_TIME
+    if _ISAI_RATE_CACHE is not None and time.time() - _ISAI_RATE_CACHE_TIME < _ISAI_RATE_CACHE_TTL:
+        return _ISAI_RATE_CACHE
+
+    if not remote_config:
+        return Decimal("0.03")
+
+    try:
+        template = remote_config.get_server_template()
+        rate_str = template.parameters.get("tasa_isai_manzanillo").default_value.value
+        rate = Decimal(str(rate_str))
+        _ISAI_RATE_CACHE = rate
+        _ISAI_RATE_CACHE_TIME = time.time()
+        return rate
+    except Exception:
+        return Decimal("0.03")
+
+def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = None) -> Decimal:
     """
     Calculates ISAI for Manzanillo.
     Formula: Max(Price, Cadastral) * Rate
+    If rate is None, fetches from Firebase Remote Config.
     """
+    if rate is None:
+        rate = get_remote_config_sync()
+
     base = max(operation_price, cadastral_value)
     isai = base * rate
     # Standard rounding to 2 decimals for currency
@@ -99,13 +133,30 @@ def calculate_retentions(rfc_receptor: str, subtotal: Decimal, iva_rate: Decimal
         retentions["isr"] = (subtotal * ISR_RETENTION_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
         # IVA Retention: 2/3 of the IVA amount
-        # IVA Amount = Subtotal * iva_rate
-        # Ret = IVA Amount * (2/3)
-        iva_amount = subtotal * iva_rate
-        ret_iva = iva_amount * (Decimal("2") / Decimal("3"))
+        # Exact 10.6667% representation
+        ret_iva = subtotal * Decimal("0.106667")
         retentions["iva"] = ret_iva.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     return retentions
+
+def validate_conceptos_objeto_imp(conceptos: list[dict]) -> bool:
+    """
+    Validates that the 'ObjetoImp' attribute is correctly assigned for each concept.
+    Honorarios -> '02'
+    Suplidos/Derechos -> '01'
+    """
+    for concepto in conceptos:
+        descripcion = concepto.get('descripcion', '').upper()
+        objeto_imp = concepto.get('objeto_imp')
+
+        if 'HONORARIOS' in descripcion:
+            if objeto_imp != '02':
+                raise ValueError(f"Concept '{descripcion}' must have ObjetoImp '02'.")
+        elif 'SUPLIDOS' in descripcion or 'DERECHOS' in descripcion:
+            if objeto_imp != '01':
+                raise ValueError(f"Concept '{descripcion}' must have ObjetoImp '01'.")
+
+    return True
 
 def validate_copropiedad(percentages: list[Decimal]) -> bool:
     """
