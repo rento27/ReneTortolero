@@ -1,6 +1,8 @@
 from decimal import Decimal
 import pytest
-from notaria_4_core.backend.lib.fiscal_engine import sanitize_name, validate_copropiedad, calculate_retentions, calculate_isai_manzanillo, validate_postal_code
+from unittest.mock import patch, MagicMock
+from notaria_4_core.backend.lib.fiscal_engine import sanitize_name, validate_copropiedad, calculate_retentions, calculate_isai_manzanillo, validate_postal_code, validate_conceptos_objeto_imp
+import notaria_4_core.backend.lib.fiscal_engine as fiscal_engine
 
 def test_sanitize_name():
     # Test removal of S.A. DE C.V.
@@ -30,7 +32,7 @@ def test_calculate_retentions_moral():
 
     assert ret["is_moral"] is True
     assert ret["isr"] == Decimal("100.00") # 10%
-    # IVA Ret = 1000 * 0.16 * 2/3 = 160 * 0.6666... = 106.666... -> 106.67
+    # IVA Ret = 1000 * 0.106667 = 106.667 -> 106.67
     assert ret["iva"] == Decimal("106.67")
 
 def test_calculate_retentions_fisica():
@@ -42,7 +44,12 @@ def test_calculate_retentions_fisica():
     assert ret["is_moral"] is False
     assert ret["isr"] == Decimal("0.00")
 
-def test_isai_manzanillo():
+@patch("notaria_4_core.backend.lib.fiscal_engine.get_remote_config_sync")
+def test_isai_manzanillo(mock_get_remote_config):
+    # Setup state leak prevention
+    fiscal_engine._ISAI_RATE_CACHE = None
+    mock_get_remote_config.return_value = Decimal("0.03")
+
     price = Decimal("1000000.00")
     cadastral = Decimal("500000.00")
     # Max is 1M. Rate 0.03 -> 30,000
@@ -51,13 +58,63 @@ def test_isai_manzanillo():
     # Cadastral higher
     assert calculate_isai_manzanillo(price, Decimal("2000000.00")) == Decimal("60000.00")
 
-def test_validate_postal_code():
+def make_firestore_postal_code_mock(expected_cp, expected_state=None, returns_data=True):
+    mock_firestore = MagicMock()
+    mock_client = MagicMock()
+    mock_collection = MagicMock()
+    mock_where1 = MagicMock()
+    mock_where2 = MagicMock()
+    mock_limit = MagicMock()
+
+    mock_firestore.client.return_value = mock_client
+    mock_client.collection.return_value = mock_collection
+    mock_collection.where.return_value = mock_where1
+    mock_where1.where.return_value = mock_where2
+
+    if returns_data:
+        mock_limit.get.return_value = [MagicMock()]
+    else:
+        mock_limit.get.return_value = []
+
+    mock_where1.limit.return_value = mock_limit
+    mock_where2.limit.return_value = mock_limit
+
+    return mock_firestore
+
+@patch('firebase_admin.firestore', create=True)
+def test_validate_postal_code(mock_firestore_patch):
+    import notaria_4_core.backend.lib.fiscal_engine as fe
+
     # Known CP
-    assert validate_postal_code("28200") is True
-    assert validate_postal_code("28200", "COL") is True
+    fe.firestore = make_firestore_postal_code_mock("28200")
+    assert fe.validate_postal_code("28200") is True
+
+    fe.firestore = make_firestore_postal_code_mock("28200", "COL")
+    assert fe.validate_postal_code("28200", "COL") is True
 
     # Wrong State
-    assert validate_postal_code("28200", "JAL") is False
+    fe.firestore = make_firestore_postal_code_mock("28200", "JAL", returns_data=False)
+    assert fe.validate_postal_code("28200", "JAL") is False
 
     # Unknown CP
-    assert validate_postal_code("99999") is False
+    fe.firestore = make_firestore_postal_code_mock("99999", returns_data=False)
+    assert fe.validate_postal_code("99999") is False
+
+def test_validate_conceptos_objeto_imp():
+    conceptos_valid = [
+        {'descripcion': 'Honorarios por servicios notariales', 'objeto_imp': '02'},
+        {'descripcion': 'Suplidos de viaje', 'objeto_imp': '01'}
+    ]
+    assert validate_conceptos_objeto_imp(conceptos_valid) is True
+
+    conceptos_invalid_1 = [
+        {'descripcion': 'Honorarios por servicios notariales', 'objeto_imp': '01'}
+    ]
+    with pytest.raises(ValueError):
+        validate_conceptos_objeto_imp(conceptos_invalid_1)
+
+    conceptos_invalid_2 = [
+        {'descripcion': 'Derechos de registro', 'objeto_imp': '02'}
+    ]
+    with pytest.raises(ValueError):
+        validate_conceptos_objeto_imp(conceptos_invalid_2)
