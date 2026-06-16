@@ -1,6 +1,16 @@
 import re
 import unicodedata
+import time
 from decimal import Decimal, getcontext, ROUND_HALF_UP
+
+try:
+    import firebase_admin
+    from firebase_admin import firestore
+    from firebase_admin import remote_config
+except ImportError:
+    firebase_admin = None
+    firestore = None
+    remote_config = None
 
 # Set strict decimal precision
 getcontext().prec = 50
@@ -20,26 +30,32 @@ ISR_RETENTION_RATE = Decimal("0.10")
 # The prompt says "Matemáticamente, esto equivale a una tasa del 10.6667%".
 IVA_RETENTION_RATE_DIRECT = Decimal("0.106667")
 
-# Stub for Postal Code Catalog (Manzanillo samples)
-# In production, this would be loaded from Firestore/Cache
-VALID_POSTAL_CODES = {
-    "28200": "COL",
-    "28218": "COL",
-    "28230": "COL",
-    "06600": "CMX" # Mexico City sample
-}
-
 def validate_postal_code(cp: str, expected_state: str = None) -> bool:
     """
-    Validates the postal code against the authorized catalog.
+    Validates the postal code against the authorized catalog in Firestore.
     If expected_state (e.g., 'COL') is provided, ensures the CP belongs to that state.
     """
-    if cp not in VALID_POSTAL_CODES:
-        # In this stub, we reject unknown CPs.
-        # In production, this would reject CPs not found in the full SAT catalog.
+    if not firestore:
+        return False # Fail safe if no db
+
+    try:
+        db = firestore.client()
+    except ValueError:
+        # If no default app, initialize one
+        firebase_admin.initialize_app()
+        db = firestore.client()
+
+    cp_doc_ref = db.collection('catalogos_sat').document('c_CodigoPostal')
+    cp_doc = cp_doc_ref.get()
+
+    if not cp_doc.exists:
         return False
 
-    if expected_state and VALID_POSTAL_CODES[cp] != expected_state:
+    data = cp_doc.to_dict()
+    if cp not in data:
+        return False
+
+    if expected_state and data[cp] != expected_state:
         return False
 
     return True
@@ -69,11 +85,48 @@ def sanitize_name(name: str) -> str:
     # Basic uppercase conversion as SAT usually expects uppercase
     return clean_name.upper()
 
-def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = Decimal("0.03")) -> Decimal:
+_ISAI_RATE_CACHE = None
+_ISAI_RATE_CACHE_TTL = 3600
+_ISAI_RATE_LAST_FETCH = 0
+
+def get_remote_config_sync():
+    """
+    Fetches the remote config template synchronously.
+    """
+    if not remote_config:
+        return None
+
+    try:
+        # Check if app is initialized
+        firebase_admin.get_app()
+    except ValueError:
+        firebase_admin.initialize_app()
+
+    return remote_config.get_server_template()
+
+def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = None) -> Decimal:
     """
     Calculates ISAI for Manzanillo.
     Formula: Max(Price, Cadastral) * Rate
+    Defaults to fetching from Remote Config if rate is omitted.
     """
+    global _ISAI_RATE_CACHE, _ISAI_RATE_LAST_FETCH
+
+    if rate is None:
+        current_time = time.time()
+        if _ISAI_RATE_CACHE is None or (current_time - _ISAI_RATE_LAST_FETCH) > _ISAI_RATE_CACHE_TTL:
+            template = get_remote_config_sync()
+            if template and 'tasa_isai_manzanillo' in template.parameters:
+                try:
+                    val = template.parameters['tasa_isai_manzanillo'].default_value.value
+                    _ISAI_RATE_CACHE = Decimal(str(val))
+                    _ISAI_RATE_LAST_FETCH = current_time
+                except Exception:
+                    pass
+            if _ISAI_RATE_CACHE is None:
+                _ISAI_RATE_CACHE = Decimal("0.03") # Fallback default
+        rate = _ISAI_RATE_CACHE
+
     base = max(operation_price, cadastral_value)
     isai = base * rate
     # Standard rounding to 2 decimals for currency
@@ -115,4 +168,21 @@ def validate_copropiedad(percentages: list[Decimal]) -> bool:
     total = sum(percentages)
     if total != Decimal("100.00"):
         raise ValueError(f"Sum of percentages must be 100.00%, got {total}")
+    return True
+
+def validate_conceptos_objeto_imp(conceptos: list[dict]) -> bool:
+    """
+    Validates that the 'ObjetoImp' for 'HONORARIOS' is '02' and for 'SUPLIDOS'/'DERECHOS' is '01'.
+    Raises ValueError if validation fails.
+    """
+    for concepto in conceptos:
+        descripcion = concepto.get('descripcion', '').upper()
+        objeto_imp = concepto.get('objeto_imp')
+
+        if 'HONORARIOS' in descripcion and objeto_imp != '02':
+            raise ValueError(f"Concepto '{descripcion}' must have ObjetoImp '02'.")
+
+        if ('SUPLIDOS' in descripcion or 'DERECHOS' in descripcion) and objeto_imp != '01':
+            raise ValueError(f"Concepto '{descripcion}' must have ObjetoImp '01'.")
+
     return True
