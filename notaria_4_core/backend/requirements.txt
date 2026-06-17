@@ -9,3 +9,4 @@ firebase-admin
 pytest
 httpx
 python-multipart
+cachetools

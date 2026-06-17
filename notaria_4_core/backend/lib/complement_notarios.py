@@ -61,7 +61,7 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
                 calle=inmueble.calle,
                 estado=inmueble.estado,
                 pais=inmueble.pais,
-                codigo_postal=inmueble.codigo_postal
+                codigo_postal=inmueble.codigo_postal, municipio=inmueble.municipio
             )
         )
 
@@ -100,11 +100,11 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
 
     if adquiriente_cop_sc_list:
         datos_adquiriente = notariospublicos10.DatosAdquiriente(
-            datos_adquirientes_cop_sc=adquiriente_cop_sc_list
+            copro_soc_conyugal_e="Si", datos_adquirientes_cop_sc=adquiriente_cop_sc_list
         )
     else:
         datos_adquiriente = notariospublicos10.DatosAdquiriente(
-            datos_un_adquiriente=un_adquiriente
+            copro_soc_conyugal_e="No", datos_un_adquiriente=un_adquiriente
         )
 
     # Process Enajenantes
@@ -119,7 +119,7 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
         nombre, paterno, materno = split_name(ena.nombre, ena.apellido_paterno, ena.apellido_materno)
         if ena.copro_soc_conyugal_e == 'Si':
             enajenante_cop_sc_list.append(
-                notariospublicos10.DatosEnajenantesCopSC(
+                notariospublicos10.DatosEnajenanteCopSC(
                     nombre=nombre,
                     apellido_paterno=paterno,
                     apellido_materno=materno,
@@ -144,11 +144,11 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
 
     if enajenante_cop_sc_list:
         datos_enajenante = notariospublicos10.DatosEnajenante(
-            datos_enajenantes_cop_sc=enajenante_cop_sc_list
+            copro_soc_conyugal_e="Si", datos_enajenantes_cop_sc=enajenante_cop_sc_list
         )
     else:
         datos_enajenante = notariospublicos10.DatosEnajenante(
-            datos_un_enajenante=un_enajenante
+            copro_soc_conyugal_e="No", datos_un_enajenante=un_enajenante
         )
 
     curp_notario = complemento_model.datos_notario.curp if complemento_model.datos_notario else "TOSR520601HOCMXA00"
