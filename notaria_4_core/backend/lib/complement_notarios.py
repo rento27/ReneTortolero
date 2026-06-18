@@ -59,6 +59,7 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
             notariospublicos10.DescInmueble(
                 tipo_inmueble=inmueble.tipo_inmueble,
                 calle=inmueble.calle,
+                municipio=getattr(inmueble, 'municipio', ''),
                 estado=inmueble.estado,
                 pais=inmueble.pais,
                 codigo_postal=inmueble.codigo_postal
@@ -70,7 +71,13 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
     un_adquiriente = None
     adquiriente_sum_percentages = Decimal("0.0")
 
+    # To pass copro_soc_conyugal_e properly
+    adq_copro_soc_conyugal_e = 'No'
+
     for adq in complemento_model.datos_adquirientes:
+        if adq.copro_soc_conyugal_e == 'Si':
+            adq_copro_soc_conyugal_e = 'Si'
+
         nombre, paterno, materno = split_name(adq.nombre, adq.apellido_paterno, adq.apellido_materno)
         if adq.copro_soc_conyugal_e == 'Si':
             # Create DatosAdquirienteCopSC object
@@ -100,10 +107,12 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
 
     if adquiriente_cop_sc_list:
         datos_adquiriente = notariospublicos10.DatosAdquiriente(
+            copro_soc_conyugal_e=adq_copro_soc_conyugal_e,
             datos_adquirientes_cop_sc=adquiriente_cop_sc_list
         )
     else:
         datos_adquiriente = notariospublicos10.DatosAdquiriente(
+            copro_soc_conyugal_e=adq_copro_soc_conyugal_e,
             datos_un_adquiriente=un_adquiriente
         )
 
@@ -112,7 +121,12 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
     un_enajenante = None
     enajenante_sum_percentages = Decimal("0.0")
 
+    ena_copro_soc_conyugal_e = 'No'
+
     for ena in complemento_model.datos_enajenantes:
+        if ena.copro_soc_conyugal_e == 'Si':
+            ena_copro_soc_conyugal_e = 'Si'
+
         if not ena.curp:
             raise ValueError("CURP is mandatory for DatosEnajenante")
 
@@ -144,10 +158,12 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
 
     if enajenante_cop_sc_list:
         datos_enajenante = notariospublicos10.DatosEnajenante(
+            copro_soc_conyugal_e=ena_copro_soc_conyugal_e,
             datos_enajenantes_cop_sc=enajenante_cop_sc_list
         )
     else:
         datos_enajenante = notariospublicos10.DatosEnajenante(
+            copro_soc_conyugal_e=ena_copro_soc_conyugal_e,
             datos_un_enajenante=un_enajenante
         )
 
