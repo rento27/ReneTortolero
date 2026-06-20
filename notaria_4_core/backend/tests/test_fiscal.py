@@ -1,6 +1,8 @@
 from decimal import Decimal
 import pytest
+from unittest.mock import patch, MagicMock
 from notaria_4_core.backend.lib.fiscal_engine import sanitize_name, validate_copropiedad, calculate_retentions, calculate_isai_manzanillo, validate_postal_code
+import notaria_4_core.backend.lib.fiscal_engine as fe
 
 def test_sanitize_name():
     # Test removal of S.A. DE C.V.
@@ -46,10 +48,34 @@ def test_isai_manzanillo():
     price = Decimal("1000000.00")
     cadastral = Decimal("500000.00")
     # Max is 1M. Rate 0.03 -> 30,000
-    assert calculate_isai_manzanillo(price, cadastral) == Decimal("30000.00")
+    assert calculate_isai_manzanillo(price, cadastral, rate=Decimal("0.03")) == Decimal("30000.00")
 
     # Cadastral higher
-    assert calculate_isai_manzanillo(price, Decimal("2000000.00")) == Decimal("60000.00")
+    assert calculate_isai_manzanillo(price, Decimal("2000000.00"), rate=Decimal("0.03")) == Decimal("60000.00")
+
+@patch("notaria_4_core.backend.lib.fiscal_engine.get_remote_config_sync")
+def test_isai_manzanillo_remote_config(mock_sync):
+    # Clear cache before testing
+    fe._ISAI_RATE_CACHE = None
+
+    mock_template = MagicMock()
+    mock_config = MagicMock()
+    # Mock rate to 4%
+    mock_config.get_string.return_value = "0.04"
+    mock_template.evaluate.return_value = mock_config
+    mock_sync.return_value = mock_template
+
+    price = Decimal("1000000.00")
+    cadastral = Decimal("500000.00")
+
+    # It should use 0.04 -> 1M * 0.04 = 40,000.00
+    assert calculate_isai_manzanillo(price, cadastral) == Decimal("40000.00")
+    mock_sync.assert_called_once()
+
+    # Test caching (should not call sync again)
+    mock_sync.reset_mock()
+    assert calculate_isai_manzanillo(price, cadastral) == Decimal("40000.00")
+    mock_sync.assert_not_called()
 
 def test_validate_postal_code():
     # Known CP

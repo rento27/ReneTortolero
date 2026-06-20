@@ -1,6 +1,8 @@
 import re
+import time
 import unicodedata
 from decimal import Decimal, getcontext, ROUND_HALF_UP
+from firebase_admin import remote_config
 
 # Set strict decimal precision
 getcontext().prec = 50
@@ -19,6 +21,11 @@ ISR_RETENTION_RATE = Decimal("0.10")
 # Or calculated as (Subtotal * 0.16) * (2/3)
 # The prompt says "Matemáticamente, esto equivale a una tasa del 10.6667%".
 IVA_RETENTION_RATE_DIRECT = Decimal("0.106667")
+
+# ISAI Rate Cache variables
+_ISAI_RATE_CACHE = None
+_ISAI_RATE_LAST_FETCH = 0
+_ISAI_RATE_CACHE_TTL = 3600
 
 # Stub for Postal Code Catalog (Manzanillo samples)
 # In production, this would be loaded from Firestore/Cache
@@ -69,11 +76,42 @@ def sanitize_name(name: str) -> str:
     # Basic uppercase conversion as SAT usually expects uppercase
     return clean_name.upper()
 
-def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = Decimal("0.03")) -> Decimal:
+def get_remote_config_sync():
+    """
+    Synchronously fetches the Firebase Remote Config template.
+    """
+    return remote_config.get_server_template()
+
+def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = None) -> Decimal:
     """
     Calculates ISAI for Manzanillo.
     Formula: Max(Price, Cadastral) * Rate
+    If rate is not provided, it fetches 'tasa_isai_manzanillo' from Firebase Remote Config,
+    caching it for 1 hour.
     """
+    global _ISAI_RATE_CACHE, _ISAI_RATE_LAST_FETCH
+
+    if rate is None:
+        current_time = time.time()
+        if _ISAI_RATE_CACHE is None or (current_time - _ISAI_RATE_LAST_FETCH) > _ISAI_RATE_CACHE_TTL:
+            try:
+                template = get_remote_config_sync()
+                # Evaluate the template to get the config
+                config = template.evaluate()
+                fetched_rate_str = config.get_string("tasa_isai_manzanillo")
+                if fetched_rate_str:
+                    _ISAI_RATE_CACHE = Decimal(fetched_rate_str)
+                else:
+                    _ISAI_RATE_CACHE = Decimal("0.03") # Fallback if empty
+            except Exception as e:
+                # If remote config fails, fallback to 0.03 and update fetch time to retry next time
+                _ISAI_RATE_CACHE = Decimal("0.03")
+                _ISAI_RATE_LAST_FETCH = current_time
+            else:
+                _ISAI_RATE_LAST_FETCH = current_time
+
+        rate = _ISAI_RATE_CACHE
+
     base = max(operation_price, cadastral_value)
     isai = base * rate
     # Standard rounding to 2 decimals for currency
