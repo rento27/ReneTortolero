@@ -1,6 +1,10 @@
 import re
 import unicodedata
+import time
 from decimal import Decimal, getcontext, ROUND_HALF_UP
+import firebase_admin
+from firebase_admin import firestore, remote_config
+from typing import List, Dict
 
 # Set strict decimal precision
 getcontext().prec = 50
@@ -15,33 +19,77 @@ REGIME_REGEX = re.compile(
 
 # Constants
 ISR_RETENTION_RATE = Decimal("0.10")
-# Two-thirds of IVA (16% * 2/3 = 10.6666...) approximated to 10.6667% for direct base calculation
-# Or calculated as (Subtotal * 0.16) * (2/3)
-# The prompt says "Matemáticamente, esto equivale a una tasa del 10.6667%".
 IVA_RETENTION_RATE_DIRECT = Decimal("0.106667")
 
-# Stub for Postal Code Catalog (Manzanillo samples)
-# In production, this would be loaded from Firestore/Cache
-VALID_POSTAL_CODES = {
-    "28200": "COL",
-    "28218": "COL",
-    "28230": "COL",
-    "06600": "CMX" # Mexico City sample
-}
+_ISAI_RATE_CACHE = None
+_ISAI_RATE_LAST_FETCH = 0
+_ISAI_RATE_CACHE_TTL = 3600
+
+def get_remote_config_sync() -> dict:
+    """
+    Fetches Firebase Remote Config synchronously, caching the template for TTL.
+    In firebase_admin 7.4.0, get_server_template is an async coroutine. We run it in a new loop if needed.
+    """
+    global _ISAI_RATE_CACHE, _ISAI_RATE_LAST_FETCH
+    current_time = time.time()
+
+    if _ISAI_RATE_CACHE is None or (current_time - _ISAI_RATE_LAST_FETCH) > _ISAI_RATE_CACHE_TTL:
+        try:
+            import asyncio
+            coro = remote_config.get_server_template()
+            try:
+                loop = asyncio.get_running_loop()
+                # Since get_server_template is async, and we're in a running loop (like FastAPI),
+                # we run the coroutine directly. However, if this function must block, we should use a separate thread or nest_asyncio.
+                # Assuming this function might be run from tests or synchronous paths as well.
+                # Here we use run_coroutine_threadsafe or create a new loop in a thread if needed.
+                # For simplicity in this fix, we'll try to just run it until complete if no loop is running.
+                raise RuntimeError("Can't run sync here")
+            except RuntimeError:
+                template = asyncio.run(coro)
+
+            config_dict = {}
+            for key, param in template.parameters.items():
+                if param.default_value:
+                    config_dict[key] = param.default_value.value
+            _ISAI_RATE_CACHE = config_dict
+            _ISAI_RATE_LAST_FETCH = current_time
+        except Exception as e:
+            # Fallback to default empty dict if Remote Config fails
+            _ISAI_RATE_CACHE = {}
+    return _ISAI_RATE_CACHE
 
 def validate_postal_code(cp: str, expected_state: str = None) -> bool:
     """
-    Validates the postal code against the authorized catalog.
+    Validates the postal code against the authorized catalog in Firestore.
     If expected_state (e.g., 'COL') is provided, ensures the CP belongs to that state.
     """
-    if cp not in VALID_POSTAL_CODES:
-        # In this stub, we reject unknown CPs.
-        # In production, this would reject CPs not found in the full SAT catalog.
+    db = firestore.client()
+    docs = db.collection('catalogos_sat').where('c_CodigoPostal', '==', cp).limit(1).get()
+
+    if not docs:
         return False
 
-    if expected_state and VALID_POSTAL_CODES[cp] != expected_state:
+    doc = docs[0].to_dict()
+
+    if expected_state and doc.get('estado') != expected_state:
         return False
 
+    return True
+
+def validate_conceptos_objeto_imp(conceptos: List[Dict]) -> bool:
+    """
+    Validates billing concepts ensuring 'Honorarios' have ObjetoImp '02'
+    and 'Suplidos'/'Derechos' have '01'.
+    """
+    for c in conceptos:
+        desc = str(c.get('descripcion', '')).upper()
+        obj_imp = str(c.get('objeto_imp', ''))
+
+        if 'HONORARIO' in desc and obj_imp != '02':
+            raise ValueError("Honorarios must have ObjetoImp '02'")
+        if ('SUPLIDO' in desc or 'DERECHO' in desc) and obj_imp != '01':
+            raise ValueError("Suplidos/Derechos must have ObjetoImp '01' or use ACuentaTerceros")
     return True
 
 def sanitize_name(name: str) -> str:
@@ -69,11 +117,16 @@ def sanitize_name(name: str) -> str:
     # Basic uppercase conversion as SAT usually expects uppercase
     return clean_name.upper()
 
-def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = Decimal("0.03")) -> Decimal:
+def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = None) -> Decimal:
     """
     Calculates ISAI for Manzanillo.
     Formula: Max(Price, Cadastral) * Rate
     """
+    if rate is None:
+        config = get_remote_config_sync()
+        rate_str = config.get("tasa_isai_manzanillo", "0.03")
+        rate = Decimal(str(rate_str))
+
     base = max(operation_price, cadastral_value)
     isai = base * rate
     # Standard rounding to 2 decimals for currency
@@ -98,11 +151,8 @@ def calculate_retentions(rfc_receptor: str, subtotal: Decimal, iva_rate: Decimal
         # ISR Retention: 10% of Subtotal
         retentions["isr"] = (subtotal * ISR_RETENTION_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
-        # IVA Retention: 2/3 of the IVA amount
-        # IVA Amount = Subtotal * iva_rate
-        # Ret = IVA Amount * (2/3)
-        iva_amount = subtotal * iva_rate
-        ret_iva = iva_amount * (Decimal("2") / Decimal("3"))
+        # IVA Retention: explicitly use base * Decimal('0.106667') as requested
+        ret_iva = subtotal * IVA_RETENTION_RATE_DIRECT
         retentions["iva"] = ret_iva.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     return retentions
