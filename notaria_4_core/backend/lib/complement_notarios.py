@@ -60,6 +60,7 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
                 tipo_inmueble=inmueble.tipo_inmueble,
                 calle=inmueble.calle,
                 estado=inmueble.estado,
+                municipio=inmueble.municipio,
                 pais=inmueble.pais,
                 codigo_postal=inmueble.codigo_postal
             )
@@ -98,12 +99,17 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
     if adquiriente_cop_sc_list and adquiriente_sum_percentages != Decimal("100.00"):
         raise ValueError(f"Sum of adquiriente coproperty percentages must be exactly 100.00%, got {adquiriente_sum_percentages:.2f}%")
 
+    # Add copro_soc_conyugal_e argument. Use 'Si' if list is populated, else 'No'.
+    adq_copro_e = 'Si' if adquiriente_cop_sc_list else 'No'
+
     if adquiriente_cop_sc_list:
         datos_adquiriente = notariospublicos10.DatosAdquiriente(
+            copro_soc_conyugal_e=adq_copro_e,
             datos_adquirientes_cop_sc=adquiriente_cop_sc_list
         )
     else:
         datos_adquiriente = notariospublicos10.DatosAdquiriente(
+            copro_soc_conyugal_e=adq_copro_e,
             datos_un_adquiriente=un_adquiriente
         )
 
@@ -142,12 +148,17 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
     if enajenante_cop_sc_list and enajenante_sum_percentages != Decimal("100.00"):
         raise ValueError(f"Sum of enajenante coproperty percentages must be exactly 100.00%, got {enajenante_sum_percentages:.2f}%")
 
+    # Add copro_soc_conyugal_e argument. Use 'Si' if list is populated, else 'No'.
+    ena_copro_e = 'Si' if enajenante_cop_sc_list else 'No'
+
     if enajenante_cop_sc_list:
         datos_enajenante = notariospublicos10.DatosEnajenante(
+            copro_soc_conyugal_e=ena_copro_e,
             datos_enajenantes_cop_sc=enajenante_cop_sc_list
         )
     else:
         datos_enajenante = notariospublicos10.DatosEnajenante(
+            copro_soc_conyugal_e=ena_copro_e,
             datos_un_enajenante=un_enajenante
         )
 
