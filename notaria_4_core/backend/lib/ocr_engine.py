@@ -21,10 +21,15 @@ except ImportError:
 try:
     import spacy
     try:
-        nlp = spacy.load("es_core_news_sm")
+        # Memory instructs attempting to load custom model first, fallback to es_core_news_lg
+        nlp = spacy.load("ner_notaria")
     except Exception as e:
-        logger.warning(f"spaCy model 'es_core_news_sm' not found. NLP features disabled. {e}")
-        nlp = None
+        logger.warning(f"spaCy model 'ner_notaria' not found. Trying fallback. {e}")
+        try:
+            nlp = spacy.load("es_core_news_lg")
+        except Exception as e2:
+            logger.warning(f"spaCy fallback model 'es_core_news_lg' not found. NLP features disabled. {e2}")
+            nlp = None
 except ImportError:
     spacy = None
     nlp = None
@@ -69,7 +74,11 @@ def extract_structured_data(text: str) -> dict:
     """
     data = {
         "escritura": None,
-        "rfcs": []
+        "rfcs": [],
+        "vendedores": [],
+        "adquirientes": [],
+        "inmuebles": [],
+        "montos": []
     }
 
     # Extract Escritura using deterministic regex
@@ -82,10 +91,43 @@ def extract_structured_data(text: str) -> dict:
     rfc_matches = re.findall(r"[A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3}", text)
     data["rfcs"] = list(set(rfc_matches))  # remove duplicates
 
-    # Stub for NLP
+    # NLP extraction
     if nlp:
-        # doc = nlp(text)
-        # NLP logic to extract Adquiriente, Enajenante, Inmueble, etc.
-        pass
+        doc = nlp(text)
+        for ent in doc.ents:
+            if ent.label_ == "VENDEDOR":
+                data["vendedores"].append(ent.text)
+            elif ent.label_ == "ADQUIRENTE":
+                data["adquirientes"].append(ent.text)
+            elif ent.label_ == "INMUEBLE":
+                data["inmuebles"].append(ent.text)
+            elif ent.label_ == "MONTO":
+                data["montos"].append(ent.text)
+
+    # Fallback to deterministic matching if NLP didn't find specific entities
+    if not data["vendedores"] or not data["adquirientes"]:
+        # Simple fallback parsing finding names near COMPARECE or COMPRA
+        sentences = text.split('.')
+        for sentence in sentences:
+            if "COMPARECE" in sentence.upper():
+                # Extract words after COMPARECE as a naive fallback
+                parts = sentence.upper().split("COMPARECE")
+                if len(parts) > 1:
+                    name_part = parts[1].strip()
+                    if name_part and name_part not in data["vendedores"]:
+                        data["vendedores"].append(name_part)
+
+            if "COMPRA" in sentence.upper():
+                parts = sentence.upper().split("COMPRA")
+                if len(parts) > 1:
+                    name_part = parts[1].strip()
+                    if name_part and name_part not in data["adquirientes"]:
+                        data["adquirientes"].append(name_part)
+
+    # Clean up results
+    data["vendedores"] = list(set(data["vendedores"]))
+    data["adquirientes"] = list(set(data["adquirientes"]))
+    data["inmuebles"] = list(set(data["inmuebles"]))
+    data["montos"] = list(set(data["montos"]))
 
     return data
