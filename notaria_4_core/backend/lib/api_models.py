@@ -44,6 +44,7 @@ class DescInmueble(BaseModel):
     tipo_inmueble: str
     calle: str
     estado: str
+    municipio: str
     pais: str = "MEX"
     codigo_postal: str
 
@@ -73,3 +74,9 @@ class InvoiceRequest(BaseModel):
 class ISAIRequest(BaseModel):
     operation_price: Decimal
     cadastral_value: Decimal
+
+class InvoiceResponse(BaseModel):
+    status: str
+    xml_base64: str
+    pdf_base64: str
+    retentions_calculated: Optional[dict] = None
