@@ -1,6 +1,32 @@
-from decimal import Decimal
 import pytest
-from notaria_4_core.backend.lib.fiscal_engine import sanitize_name, validate_copropiedad, calculate_retentions, calculate_isai_manzanillo, validate_postal_code
+from decimal import Decimal
+from unittest.mock import patch, MagicMock
+
+# Important: ensure _ISAI_RATE_CACHE reset before import to have a clean slate if needed
+import notaria_4_core.backend.lib.fiscal_engine as fiscal_engine
+from notaria_4_core.backend.lib.fiscal_engine import (
+    sanitize_name, validate_copropiedad, calculate_retentions,
+    calculate_isai_manzanillo, validate_postal_code
+)
+
+def make_firestore_postal_code_mock(exists, expected_state=None):
+    mock_db = MagicMock()
+    mock_collection = MagicMock()
+    mock_document = MagicMock()
+    mock_doc_snapshot = MagicMock()
+
+    mock_db.collection.return_value = mock_collection
+    mock_collection.document.return_value = mock_document
+    mock_document.get.return_value = mock_doc_snapshot
+
+    mock_doc_snapshot.exists = exists
+    if exists and expected_state:
+        mock_doc_snapshot.to_dict.return_value = {'estado': expected_state}
+    else:
+        mock_doc_snapshot.to_dict.return_value = {}
+
+    return mock_db
+
 
 def test_sanitize_name():
     # Test removal of S.A. DE C.V.
@@ -42,22 +68,49 @@ def test_calculate_retentions_fisica():
     assert ret["is_moral"] is False
     assert ret["isr"] == Decimal("0.00")
 
-def test_isai_manzanillo():
+@patch('notaria_4_core.backend.lib.fiscal_engine.get_remote_config_sync')
+def test_isai_manzanillo(mock_get_remote_config_sync):
+    fiscal_engine._ISAI_RATE_CACHE = None
+
+    mock_template = MagicMock()
+    mock_param = MagicMock()
+    mock_param.default_value.value = "0.04"
+    mock_template.parameters = {'tasa_isai_manzanillo': mock_param}
+    mock_get_remote_config_sync.return_value = mock_template
+
     price = Decimal("1000000.00")
     cadastral = Decimal("500000.00")
-    # Max is 1M. Rate 0.03 -> 30,000
+
+    # 4% of 1,000,000 is 40,000
+    assert calculate_isai_manzanillo(price, cadastral) == Decimal("40000.00")
+    mock_get_remote_config_sync.assert_called_once()
+
+    # Test fallback to default when mock fails
+    fiscal_engine._ISAI_RATE_CACHE = None
+    mock_get_remote_config_sync.side_effect = Exception("Network Error")
+
+    # 3% of 1,000,000 is 30,000
     assert calculate_isai_manzanillo(price, cadastral) == Decimal("30000.00")
 
-    # Cadastral higher
-    assert calculate_isai_manzanillo(price, Decimal("2000000.00")) == Decimal("60000.00")
+    # Test explicit rate
+    fiscal_engine._ISAI_RATE_CACHE = None
+    assert calculate_isai_manzanillo(price, cadastral, Decimal("0.05")) == Decimal("50000.00")
 
-def test_validate_postal_code():
+
+@patch('firebase_admin.firestore', create=True)
+def test_validate_postal_code(mock_firestore):
     # Known CP
+    mock_firestore.client.return_value = make_firestore_postal_code_mock(True)
     assert validate_postal_code("28200") is True
+
+    # Known CP with correct state
+    mock_firestore.client.return_value = make_firestore_postal_code_mock(True, "COL")
     assert validate_postal_code("28200", "COL") is True
 
     # Wrong State
+    mock_firestore.client.return_value = make_firestore_postal_code_mock(True, "COL")
     assert validate_postal_code("28200", "JAL") is False
 
     # Unknown CP
+    mock_firestore.client.return_value = make_firestore_postal_code_mock(False)
     assert validate_postal_code("99999") is False
