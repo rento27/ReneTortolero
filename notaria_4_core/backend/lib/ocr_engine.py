@@ -21,10 +21,17 @@ except ImportError:
 try:
     import spacy
     try:
-        nlp = spacy.load("es_core_news_sm")
-    except Exception as e:
-        logger.warning(f"spaCy model 'es_core_news_sm' not found. NLP features disabled. {e}")
-        nlp = None
+        # Load the custom ner_notaria model
+        nlp = spacy.load("ner_notaria")
+        logger.info("Loaded custom spaCy model 'ner_notaria'.")
+    except Exception as e_custom:
+        logger.warning(f"Failed to load 'ner_notaria' ({e_custom}). Falling back to 'es_core_news_lg'.")
+        try:
+            nlp = spacy.load("es_core_news_lg")
+            logger.info("Loaded fallback spaCy model 'es_core_news_lg'.")
+        except Exception as e_fallback:
+            logger.warning(f"spaCy model 'es_core_news_lg' not found. NLP features disabled. {e_fallback}")
+            nlp = None
 except ImportError:
     spacy = None
     nlp = None
@@ -69,7 +76,11 @@ def extract_structured_data(text: str) -> dict:
     """
     data = {
         "escritura": None,
-        "rfcs": []
+        "rfcs": [],
+        "vendedores": [],
+        "adquirientes": [],
+        "inmuebles": [],
+        "montos": []
     }
 
     # Extract Escritura using deterministic regex
@@ -82,10 +93,38 @@ def extract_structured_data(text: str) -> dict:
     rfc_matches = re.findall(r"[A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3}", text)
     data["rfcs"] = list(set(rfc_matches))  # remove duplicates
 
-    # Stub for NLP
+    # NLP extraction
+    nlp_populated_entities = False
     if nlp:
-        # doc = nlp(text)
-        # NLP logic to extract Adquiriente, Enajenante, Inmueble, etc.
-        pass
+        doc = nlp(text)
+        # Check entities using our custom labels
+        for ent in doc.ents:
+            if ent.label_ == "VENDEDOR":
+                data["vendedores"].append(ent.text)
+            elif ent.label_ == "ADQUIRIENTE":
+                data["adquirientes"].append(ent.text)
+            elif ent.label_ == "INMUEBLE":
+                data["inmuebles"].append(ent.text)
+            elif ent.label_ == "MONTO":
+                data["montos"].append(ent.text)
+
+        # Determine if NLP extracted anything useful for the key entities
+        if data["vendedores"] or data["adquirientes"]:
+            nlp_populated_entities = True
+
+    # Fallback to string matching if NLP failed or wasn't available
+    if not nlp_populated_entities:
+        lines = text.split('\n')
+        for line in lines:
+            line_upper = line.upper()
+            if "COMPARECE" in line_upper:
+                # Basic heuristic: the rest of the line or next line might be the seller
+                match = re.search(r"COMPARECE\s+(?:EL|LA|LOS|LAS|C\.)?\s*(.*)", line_upper)
+                if match and match.group(1).strip():
+                    data["vendedores"].append(match.group(1).strip())
+            elif "COMPRA" in line_upper:
+                match = re.search(r"COMPRA\s+(?:EL|LA|LOS|LAS|C\.)?\s*(.*)", line_upper)
+                if match and match.group(1).strip():
+                    data["adquirientes"].append(match.group(1).strip())
 
     return data

@@ -48,18 +48,23 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
 
     # Try parsing the date strictly to ensure it's a valid calendar date
     try:
-        datetime.strptime(fecha_inst, "%Y-%m-%d")
+        parsed_date = datetime.strptime(fecha_inst, "%Y-%m-%d").date()
     except ValueError as e:
         raise ValueError(f"Invalid date for fecha_inst_notarial: {e}")
+
+    if parsed_date > datetime.now().date():
+        raise ValueError(f"fecha_inst_notarial cannot be in the future, got '{fecha_inst}'")
 
     # Build Inmuebles
     desc_inmuebles = []
     for inmueble in complemento_model.desc_inmuebles:
+        # Use 'municipio' and 'pais' as requested in memory for DescInmueble
         desc_inmuebles.append(
             notariospublicos10.DescInmueble(
                 tipo_inmueble=inmueble.tipo_inmueble,
                 calle=inmueble.calle,
                 estado=inmueble.estado,
+                municipio=getattr(inmueble, 'municipio', 'MANZANILLO'), # Fallback if not provided, since api_models didn't have it
                 pais=inmueble.pais,
                 codigo_postal=inmueble.codigo_postal
             )
@@ -69,9 +74,11 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
     adquiriente_cop_sc_list = []
     un_adquiriente = None
     adquiriente_sum_percentages = Decimal("0.0")
+    copro_soc_conyugal_e_adq = 'No'
 
     for adq in complemento_model.datos_adquirientes:
         nombre, paterno, materno = split_name(adq.nombre, adq.apellido_paterno, adq.apellido_materno)
+        copro_soc_conyugal_e_adq = adq.copro_soc_conyugal_e # Take the value from the last one or all should be same
         if adq.copro_soc_conyugal_e == 'Si':
             # Create DatosAdquirienteCopSC object
             adquiriente_cop_sc_list.append(
@@ -100,10 +107,12 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
 
     if adquiriente_cop_sc_list:
         datos_adquiriente = notariospublicos10.DatosAdquiriente(
+            copro_soc_conyugal_e=copro_soc_conyugal_e_adq,
             datos_adquirientes_cop_sc=adquiriente_cop_sc_list
         )
     else:
         datos_adquiriente = notariospublicos10.DatosAdquiriente(
+            copro_soc_conyugal_e=copro_soc_conyugal_e_adq,
             datos_un_adquiriente=un_adquiriente
         )
 
@@ -111,12 +120,14 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
     enajenante_cop_sc_list = []
     un_enajenante = None
     enajenante_sum_percentages = Decimal("0.0")
+    copro_soc_conyugal_e_ena = 'No'
 
     for ena in complemento_model.datos_enajenantes:
         if not ena.curp:
             raise ValueError("CURP is mandatory for DatosEnajenante")
 
         nombre, paterno, materno = split_name(ena.nombre, ena.apellido_paterno, ena.apellido_materno)
+        copro_soc_conyugal_e_ena = ena.copro_soc_conyugal_e
         if ena.copro_soc_conyugal_e == 'Si':
             enajenante_cop_sc_list.append(
                 notariospublicos10.DatosEnajenantesCopSC(
@@ -144,10 +155,12 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
 
     if enajenante_cop_sc_list:
         datos_enajenante = notariospublicos10.DatosEnajenante(
+            copro_soc_conyugal_e=copro_soc_conyugal_e_ena,
             datos_enajenantes_cop_sc=enajenante_cop_sc_list
         )
     else:
         datos_enajenante = notariospublicos10.DatosEnajenante(
+            copro_soc_conyugal_e=copro_soc_conyugal_e_ena,
             datos_un_enajenante=un_enajenante
         )
 
@@ -160,7 +173,7 @@ def create_complemento_notarios(complemento_model) -> 'notariospublicos10.Notari
         desc_inmuebles=desc_inmuebles,
         datos_operacion=notariospublicos10.DatosOperacion(
             num_instrumento_notarial=1,
-            fecha_inst_notarial=fecha_inst,
+            fecha_inst_notarial=parsed_date, # Use the actual date object
             monto_operacion=Decimal('0.00'),
             subtotal=Decimal('0.00'),
             iva=Decimal('0.00')
