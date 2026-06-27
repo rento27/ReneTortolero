@@ -3,11 +3,13 @@ from decimal import Decimal
 import uuid
 import os
 import shutil
+import base64
 
-from lib.api_models import InvoiceRequest, ISAIRequest
+from lib.api_models import InvoiceRequest, ISAIRequest, InvoiceResponse
 from lib.fiscal_engine import sanitize_name, calculate_isai_manzanillo, calculate_retentions, validate_postal_code
 from lib.xml_generator import generate_signed_xml
 from lib.ocr_engine import extract_text_from_pdf, extract_structured_data
+from lib.pdf_generator import generate_hybrid_pdf
 
 app = FastAPI(title="Notaria 4 Digital Core API", version="1.0.0")
 
@@ -37,13 +39,14 @@ def create_cfdi(request: InvoiceRequest):
     # 3. Generate XML
     try:
         xml_bytes = generate_signed_xml(data)
-        # In a real scenario, we might upload this to storage and return a URL
-        # For now, return the stub content
-        return {
-            "status": "success",
-            "xml_base64": xml_bytes.decode('utf-8'), # Stub returns simple string bytes
-            "retentions_calculated": retentions
-        }
+
+        # 4. Generate Hybrid PDF
+        pdf_bytes = generate_hybrid_pdf(xml_bytes, data)
+
+        return InvoiceResponse(
+            xml_base64=base64.b64encode(xml_bytes).decode('utf-8'),
+            pdf_base64=base64.b64encode(pdf_bytes).decode('utf-8')
+        )
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=f"Validation Error: {str(ve)}")
     except Exception as e:
