@@ -43,6 +43,7 @@ class DatosEnajenante(BaseModel):
 class DescInmueble(BaseModel):
     tipo_inmueble: str
     calle: str
+    municipio: str
     estado: str
     pais: str = "MEX"
     codigo_postal: str
@@ -73,3 +74,7 @@ class InvoiceRequest(BaseModel):
 class ISAIRequest(BaseModel):
     operation_price: Decimal
     cadastral_value: Decimal
+
+class InvoiceResponse(BaseModel):
+    xml_base64: str
+    pdf_base64: str

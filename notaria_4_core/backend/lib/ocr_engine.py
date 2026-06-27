@@ -69,7 +69,11 @@ def extract_structured_data(text: str) -> dict:
     """
     data = {
         "escritura": None,
-        "rfcs": []
+        "rfcs": [],
+        "vendedores": [],
+        "adquirientes": [],
+        "inmuebles": [],
+        "montos": []
     }
 
     # Extract Escritura using deterministic regex
@@ -82,10 +86,32 @@ def extract_structured_data(text: str) -> dict:
     rfc_matches = re.findall(r"[A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3}", text)
     data["rfcs"] = list(set(rfc_matches))  # remove duplicates
 
+    # Use explicit string matching fallback logic if spaCy fails or is not available for full extraction
+    if not nlp or not data.get("vendedores") or not data.get("adquirientes"):
+        # Very simple heuristic logic based on keyword matching
+        lines = text.split('\n')
+        for i, line in enumerate(lines):
+            line_upper = line.upper()
+            if 'COMPARECE' in line_upper:
+                # Naively assume the next few words are the vendor name
+                parts = line.split('COMPARECE')
+                if len(parts) > 1:
+                    name_part = parts[1].strip()
+                    if name_part:
+                        data["vendedores"].append(name_part.split(',')[0].strip())
+            elif 'COMPRA' in line_upper:
+                # Naively assume the preceding or following words might be the acquirer
+                parts = line.split('COMPRA')
+                if len(parts) > 1:
+                    name_part = parts[0].strip()
+                    if name_part:
+                        data["adquirientes"].append(name_part.split(',')[0].strip())
+
     # Stub for NLP
     if nlp:
+        # We would use the custom `ner_notaria` spaCy model with a fallback to `es_core_news_lg` here
         # doc = nlp(text)
-        # NLP logic to extract Adquiriente, Enajenante, Inmueble, etc.
+        # For now we'll stick to the basic regex and simple matches
         pass
 
     return data
