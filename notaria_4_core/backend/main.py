@@ -4,10 +4,15 @@ import uuid
 import os
 import shutil
 
-from lib.api_models import InvoiceRequest, ISAIRequest
+import base64
+import hashlib
+
+from lib.api_models import InvoiceRequest, ISAIRequest, InvoiceResponse
 from lib.fiscal_engine import sanitize_name, calculate_isai_manzanillo, calculate_retentions, validate_postal_code
 from lib.xml_generator import generate_signed_xml
 from lib.ocr_engine import extract_text_from_pdf, extract_structured_data
+from lib.pdf_generator import generate_hybrid_pdf
+from lib.nom151 import request_nom151_constancia
 
 app = FastAPI(title="Notaria 4 Digital Core API", version="1.0.0")
 
@@ -15,7 +20,7 @@ app = FastAPI(title="Notaria 4 Digital Core API", version="1.0.0")
 def health_check():
     return {"status": "ok", "service": "notaria-4-core-backend"}
 
-@app.post("/api/v1/cfdi")
+@app.post("/api/v1/cfdi", response_model=InvoiceResponse)
 def create_cfdi(request: InvoiceRequest):
     # Pydantic v2 compatibility
     data = request.model_dump()
@@ -34,16 +39,26 @@ def create_cfdi(request: InvoiceRequest):
         data['subtotal']
     )
 
-    # 3. Generate XML
+    # 3. Generate XML and Hybrid PDF, then stamp NOM151
     try:
         xml_bytes = generate_signed_xml(data)
-        # In a real scenario, we might upload this to storage and return a URL
-        # For now, return the stub content
-        return {
-            "status": "success",
-            "xml_base64": xml_bytes.decode('utf-8'), # Stub returns simple string bytes
-            "retentions_calculated": retentions
-        }
+        pdf_bytes = generate_hybrid_pdf(xml_bytes, data)
+
+        # Calculate SHA-256 hash of PDF
+        pdf_hash = hashlib.sha256(pdf_bytes).hexdigest()
+
+        # Request NOM-151 stamp
+        nom151_response = request_nom151_constancia(pdf_hash)
+
+        xml_base64 = base64.b64encode(xml_bytes).decode('utf-8')
+        pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
+
+        return InvoiceResponse(
+            xml_base64=xml_base64,
+            pdf_base64=pdf_base64,
+            retentions_calculated=retentions,
+            nom151_constancia=nom151_response
+        )
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=f"Validation Error: {str(ve)}")
     except Exception as e:

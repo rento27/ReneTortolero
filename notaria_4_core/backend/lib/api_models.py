@@ -70,6 +70,13 @@ class InvoiceRequest(BaseModel):
     datos_extra: Optional[dict] = None
     complemento_notarios: Optional[ComplementoNotariosModel] = None
 
+class InvoiceResponse(BaseModel):
+    status: str = "success"
+    xml_base64: str
+    pdf_base64: str
+    retentions_calculated: dict
+    nom151_constancia: dict
+
 class ISAIRequest(BaseModel):
     operation_price: Decimal
     cadastral_value: Decimal
