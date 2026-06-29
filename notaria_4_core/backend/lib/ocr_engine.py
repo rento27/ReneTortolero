@@ -21,10 +21,14 @@ except ImportError:
 try:
     import spacy
     try:
-        nlp = spacy.load("es_core_news_sm")
+        nlp = spacy.load("ner_notaria")
     except Exception as e:
-        logger.warning(f"spaCy model 'es_core_news_sm' not found. NLP features disabled. {e}")
-        nlp = None
+        logger.warning(f"Custom spaCy model 'ner_notaria' not found. Trying fallback. {e}")
+        try:
+            nlp = spacy.load("es_core_news_lg")
+        except Exception as e2:
+            logger.warning(f"spaCy fallback model 'es_core_news_lg' not found. NLP features disabled. {e2}")
+            nlp = None
 except ImportError:
     spacy = None
     nlp = None
@@ -69,7 +73,11 @@ def extract_structured_data(text: str) -> dict:
     """
     data = {
         "escritura": None,
-        "rfcs": []
+        "rfcs": [],
+        "vendedores": [],
+        "adquirientes": [],
+        "inmuebles": [],
+        "montos": []
     }
 
     # Extract Escritura using deterministic regex
@@ -82,10 +90,33 @@ def extract_structured_data(text: str) -> dict:
     rfc_matches = re.findall(r"[A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3}", text)
     data["rfcs"] = list(set(rfc_matches))  # remove duplicates
 
-    # Stub for NLP
+    nlp_populated = False
     if nlp:
-        # doc = nlp(text)
+        doc = nlp(text)
         # NLP logic to extract Adquiriente, Enajenante, Inmueble, etc.
-        pass
+        for ent in doc.ents:
+            if ent.label_ == "VENDEDOR":
+                data["vendedores"].append(ent.text)
+            elif ent.label_ == "ADQUIRENTE":
+                data["adquirientes"].append(ent.text)
+            elif ent.label_ == "INMUEBLE":
+                data["inmuebles"].append(ent.text)
+            elif ent.label_ == "MONTO":
+                data["montos"].append(ent.text)
+
+        if data["vendedores"] or data["adquirientes"]:
+            nlp_populated = True
+
+    # Fallback to explicit string matching logic if spaCy fails to populate entities
+    if not nlp_populated:
+        # Very simplistic fallback string matching looking for keywords 'COMPARECE' and 'COMPRA'
+        # In a real scenario, this would use more robust regex or logic
+        lines = text.split('\n')
+        for i, line in enumerate(lines):
+            if "COMPARECE" in line.upper():
+                # Grab a chunk after COMPARECE as a naive fallback
+                data["vendedores"].append(line.replace("COMPARECE", "").strip())
+            if "COMPRA" in line.upper():
+                data["adquirientes"].append(line.replace("COMPRA", "").strip())
 
     return data

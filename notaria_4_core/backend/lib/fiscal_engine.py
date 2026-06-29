@@ -1,15 +1,23 @@
 import re
+import time
 import unicodedata
 from decimal import Decimal, getcontext, ROUND_HALF_UP
+
+try:
+    import firebase_admin
+    from firebase_admin import remote_config
+except ImportError:
+    firebase_admin = None
+    remote_config = None
 
 # Set strict decimal precision
 getcontext().prec = 50
 
 # Corporate Regimes to strip (Regex pattern)
 # Matches common endings like S.A. DE C.V., S.C., etc., allowing for optional punctuation and casing.
-# The pattern looks for whitespace followed by these acronyms at the end of the string.
+# The pattern looks for optional comma and whitespace followed by these acronyms at the end of the string.
 REGIME_REGEX = re.compile(
-    r"\s+(S\.?A\.?(\s+DE\s+C\.?V\.?)?|S\.?C\.?|S\.?A\.?P\.?I\.?(\s+DE\s+C\.?V\.?)?|S\.? DE R\.?L\.?(\s+DE\s+C\.?V\.?)?|L\.?T\.?D\.?|INC\.?|S\.?A\.?S\.?)$",
+    r",?\s+(S\.?A\.?(\s+DE\s+C\.?V\.?)?|S\.?C\.?|S\.?A\.?P\.?I\.?(\s+DE\s+C\.?V\.?)?|S\.? DE R\.?L\.?(\s+DE\s+C\.?V\.?)?|L\.?T\.?D\.?|INC\.?|S\.?A\.?S\.?)\s*$",
     re.IGNORECASE
 )
 
@@ -48,16 +56,13 @@ def sanitize_name(name: str) -> str:
     """
     Removes corporate regimes from the name for CFDI 4.0 validation.
     Example: "INMOBILIARIA DEL PACÍFICO, S.A. DE C.V." -> "INMOBILIARIA DEL PACIFICO"
-    Also normalizes whitespace and capitalization.
+    Also normalizes whitespace and capitalization, while keeping other valid punctuation.
     """
     if not name:
         return ""
 
-    # Remove commas which often precede the regime
-    clean_name = name.replace(",", "")
-
-    # Remove the regime using regex
-    clean_name = REGIME_REGEX.sub("", clean_name)
+    # Remove the regime using regex, including any preceding comma
+    clean_name = REGIME_REGEX.sub("", name)
 
     # Remove extra internal whitespace and trim
     clean_name = " ".join(clean_name.split())
@@ -69,11 +74,45 @@ def sanitize_name(name: str) -> str:
     # Basic uppercase conversion as SAT usually expects uppercase
     return clean_name.upper()
 
-def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = Decimal("0.03")) -> Decimal:
+_ISAI_RATE_CACHE = None
+_ISAI_RATE_LAST_FETCH = 0
+_ISAI_RATE_CACHE_TTL = 3600
+
+def get_remote_config_sync() -> Decimal:
+    """
+    Fetches the `tasa_isai_manzanillo` from Firebase Remote Config synchronously.
+    Caches the result for 1 hour.
+    """
+    global _ISAI_RATE_CACHE, _ISAI_RATE_LAST_FETCH
+    current_time = time.time()
+
+    if _ISAI_RATE_CACHE is not None and (current_time - _ISAI_RATE_LAST_FETCH < _ISAI_RATE_CACHE_TTL):
+        return _ISAI_RATE_CACHE
+
+    if remote_config:
+        try:
+            template = remote_config.get_server_template()
+            if "tasa_isai_manzanillo" in template.parameters:
+                val = template.parameters["tasa_isai_manzanillo"].default_value.value
+                _ISAI_RATE_CACHE = Decimal(str(val))
+                _ISAI_RATE_LAST_FETCH = current_time
+                return _ISAI_RATE_CACHE
+        except Exception:
+            pass
+
+    # Default fallback
+    _ISAI_RATE_CACHE = Decimal("0.03")
+    _ISAI_RATE_LAST_FETCH = current_time
+    return _ISAI_RATE_CACHE
+
+def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = None) -> Decimal:
     """
     Calculates ISAI for Manzanillo.
     Formula: Max(Price, Cadastral) * Rate
     """
+    if rate is None:
+        rate = get_remote_config_sync()
+
     base = max(operation_price, cadastral_value)
     isai = base * rate
     # Standard rounding to 2 decimals for currency
@@ -99,10 +138,8 @@ def calculate_retentions(rfc_receptor: str, subtotal: Decimal, iva_rate: Decimal
         retentions["isr"] = (subtotal * ISR_RETENTION_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
         # IVA Retention: 2/3 of the IVA amount
-        # IVA Amount = Subtotal * iva_rate
-        # Ret = IVA Amount * (2/3)
-        iva_amount = subtotal * iva_rate
-        ret_iva = iva_amount * (Decimal("2") / Decimal("3"))
+        # Calculated directly using exactly 10.6667% as per specification.
+        ret_iva = subtotal * IVA_RETENTION_RATE_DIRECT
         retentions["iva"] = ret_iva.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     return retentions
