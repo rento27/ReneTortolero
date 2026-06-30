@@ -1,5 +1,7 @@
 from decimal import Decimal
 import pytest
+from unittest.mock import patch, MagicMock
+from notaria_4_core.backend.lib import fiscal_engine
 from notaria_4_core.backend.lib.fiscal_engine import sanitize_name, validate_copropiedad, calculate_retentions, calculate_isai_manzanillo, validate_postal_code
 
 def test_sanitize_name():
@@ -42,7 +44,16 @@ def test_calculate_retentions_fisica():
     assert ret["is_moral"] is False
     assert ret["isr"] == Decimal("0.00")
 
-def test_isai_manzanillo():
+
+@patch("notaria_4_core.backend.lib.fiscal_engine.get_remote_config_sync")
+def test_isai_manzanillo(mock_get_remote_config_sync):
+    fiscal_engine._ISAI_RATE_CACHE = None
+    mock_template = MagicMock()
+    mock_param = MagicMock()
+    mock_param.default_value.value = "0.03"
+    mock_template.parameters = {'tasa_isai_manzanillo': mock_param}
+    mock_get_remote_config_sync.return_value = mock_template
+
     price = Decimal("1000000.00")
     cadastral = Decimal("500000.00")
     # Max is 1M. Rate 0.03 -> 30,000
@@ -51,13 +62,34 @@ def test_isai_manzanillo():
     # Cadastral higher
     assert calculate_isai_manzanillo(price, Decimal("2000000.00")) == Decimal("60000.00")
 
-def test_validate_postal_code():
+def make_firestore_postal_code_mock(exists=True, estado="COL"):
+    mock_db = MagicMock()
+    mock_collection = MagicMock()
+    mock_document = MagicMock()
+    mock_doc = MagicMock()
+
+    mock_doc.exists = exists
+    mock_doc.to_dict.return_value = {'estado': estado}
+    mock_document.get.return_value = mock_doc
+    mock_collection.document.return_value = mock_document
+    mock_db.collection.return_value = mock_collection
+    return mock_db
+
+@patch('firebase_admin.firestore.client')
+def test_validate_postal_code_valid(mock_client):
+    mock_client.return_value = make_firestore_postal_code_mock(exists=True, estado="COL")
     # Known CP
     assert validate_postal_code("28200") is True
     assert validate_postal_code("28200", "COL") is True
 
+@patch('firebase_admin.firestore.client')
+def test_validate_postal_code_wrong_state(mock_client):
+    mock_client.return_value = make_firestore_postal_code_mock(exists=True, estado="COL")
     # Wrong State
     assert validate_postal_code("28200", "JAL") is False
 
+@patch('firebase_admin.firestore.client')
+def test_validate_postal_code_unknown(mock_client):
+    mock_client.return_value = make_firestore_postal_code_mock(exists=False)
     # Unknown CP
     assert validate_postal_code("99999") is False
