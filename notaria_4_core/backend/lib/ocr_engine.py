@@ -21,10 +21,13 @@ except ImportError:
 try:
     import spacy
     try:
-        nlp = spacy.load("es_core_news_sm")
-    except Exception as e:
-        logger.warning(f"spaCy model 'es_core_news_sm' not found. NLP features disabled. {e}")
-        nlp = None
+        nlp = spacy.load("ner_notaria")
+    except Exception:
+        try:
+            nlp = spacy.load("es_core_news_lg")
+        except Exception as e:
+            logger.warning(f"spaCy models 'ner_notaria' and 'es_core_news_lg' not found. NLP features disabled. {e}")
+            nlp = None
 except ImportError:
     spacy = None
     nlp = None
@@ -69,7 +72,11 @@ def extract_structured_data(text: str) -> dict:
     """
     data = {
         "escritura": None,
-        "rfcs": []
+        "rfcs": [],
+        "vendedores": [],
+        "adquirientes": [],
+        "inmuebles": [],
+        "montos": []
     }
 
     # Extract Escritura using deterministic regex
@@ -82,10 +89,28 @@ def extract_structured_data(text: str) -> dict:
     rfc_matches = re.findall(r"[A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3}", text)
     data["rfcs"] = list(set(rfc_matches))  # remove duplicates
 
-    # Stub for NLP
+    # Use NLP if available
     if nlp:
-        # doc = nlp(text)
-        # NLP logic to extract Adquiriente, Enajenante, Inmueble, etc.
-        pass
+        doc = nlp(text)
+        for ent in doc.ents:
+            if ent.label_ == "VENDEDOR":
+                data["vendedores"].append(ent.text)
+            elif ent.label_ == "ADQUIRENTE":
+                data["adquirientes"].append(ent.text)
+            elif ent.label_ == "INMUEBLE":
+                data["inmuebles"].append(ent.text)
+            elif ent.label_ == "MONTO":
+                data["montos"].append(ent.text)
+
+    # Fallback logic for vendedores and adquirientes if empty
+    if not data["vendedores"]:
+        vendedor_matches = re.findall(r"COMPARECE(?:N?)\s+([^,\n]+)", text, re.IGNORECASE)
+        if vendedor_matches:
+            data["vendedores"].extend([m.strip() for m in vendedor_matches])
+
+    if not data["adquirientes"]:
+        adquiriente_matches = re.findall(r"COMPRA(?:N?)\s+([^,\n]+)", text, re.IGNORECASE)
+        if adquiriente_matches:
+            data["adquirientes"].extend([m.strip() for m in adquiriente_matches])
 
     return data
