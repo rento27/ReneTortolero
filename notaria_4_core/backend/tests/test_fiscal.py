@@ -25,13 +25,13 @@ def test_validate_copropiedad_fail():
 def test_calculate_retentions_moral():
     # RFC 12 chars
     rfc = "ABC123456T12"
-    subtotal = Decimal("1000.00")
+    subtotal = Decimal("6083.91")
     ret = calculate_retentions(rfc, subtotal)
 
     assert ret["is_moral"] is True
-    assert ret["isr"] == Decimal("100.00") # 10%
-    # IVA Ret = 1000 * 0.16 * 2/3 = 160 * 0.6666... = 106.666... -> 106.67
-    assert ret["iva"] == Decimal("106.67")
+    assert ret["isr"] == Decimal("608.39") # 10%
+    # IVA Ret = 6083.91 * 0.106667 = 648.95
+    assert ret["iva"] == Decimal("648.95")
 
 def test_calculate_retentions_fisica():
     # RFC 13 chars
@@ -42,7 +42,18 @@ def test_calculate_retentions_fisica():
     assert ret["is_moral"] is False
     assert ret["isr"] == Decimal("0.00")
 
-def test_isai_manzanillo():
+from unittest.mock import patch, MagicMock
+from notaria_4_core.backend.lib import fiscal_engine
+
+@patch("notaria_4_core.backend.lib.fiscal_engine.get_remote_config_sync")
+def test_isai_manzanillo(mock_get_remote_config_sync):
+    fiscal_engine._ISAI_RATE_CACHE = None
+    mock_template = MagicMock()
+    mock_param = MagicMock()
+    mock_param.default_value.value = "0.03"
+    mock_template.parameters = {'tasa_isai_manzanillo': mock_param}
+    mock_get_remote_config_sync.return_value = mock_template
+
     price = Decimal("1000000.00")
     cadastral = Decimal("500000.00")
     # Max is 1M. Rate 0.03 -> 30,000
@@ -51,7 +62,22 @@ def test_isai_manzanillo():
     # Cadastral higher
     assert calculate_isai_manzanillo(price, Decimal("2000000.00")) == Decimal("60000.00")
 
-def test_validate_postal_code():
+@patch('notaria_4_core.backend.lib.fiscal_engine.firestore', create=True)
+def test_validate_postal_code(mock_firestore):
+    mock_db = MagicMock()
+    mock_firestore.client.return_value = mock_db
+
+    mock_doc_ref = mock_db.collection.return_value.document.return_value
+    mock_doc = MagicMock()
+    mock_doc.exists = True
+    mock_doc.to_dict.return_value = {
+        "28200": "COL",
+        "28218": "COL",
+        "28230": "COL",
+        "06600": "CMX"
+    }
+    mock_doc_ref.get.return_value = mock_doc
+
     # Known CP
     assert validate_postal_code("28200") is True
     assert validate_postal_code("28200", "COL") is True

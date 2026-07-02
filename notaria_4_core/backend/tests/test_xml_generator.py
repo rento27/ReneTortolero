@@ -1,10 +1,15 @@
 import os
 import pytest
+from unittest.mock import patch, MagicMock
 from decimal import Decimal
 from notaria_4_core.backend.lib.xml_generator import generate_signed_xml
 
-def test_generate_xml():
-    os.environ["MOCK_SIGNER"] = "1"
+@patch('notaria_4_core.backend.lib.xml_generator.cfdi40.Comprobante.sign')
+@patch('notaria_4_core.backend.lib.xml_generator.load_signer_from_secret_manager')
+def test_generate_xml(mock_load_signer, mock_sign):
+    mock_signer = MagicMock()
+    mock_load_signer.return_value = mock_signer
+
     data = {
         'receptor': {
             'rfc': 'ABC123456T12',
