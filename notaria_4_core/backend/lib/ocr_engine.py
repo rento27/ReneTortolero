@@ -21,10 +21,14 @@ except ImportError:
 try:
     import spacy
     try:
-        nlp = spacy.load("es_core_news_sm")
+        nlp = spacy.load("ner_notaria")
     except Exception as e:
-        logger.warning(f"spaCy model 'es_core_news_sm' not found. NLP features disabled. {e}")
-        nlp = None
+        logger.warning(f"spaCy model 'ner_notaria' not found, falling back to 'es_core_news_lg'. {e}")
+        try:
+            nlp = spacy.load("es_core_news_lg")
+        except Exception as e2:
+            logger.warning(f"spaCy model 'es_core_news_lg' not found. NLP features disabled. {e2}")
+            nlp = None
 except ImportError:
     spacy = None
     nlp = None
@@ -69,7 +73,11 @@ def extract_structured_data(text: str) -> dict:
     """
     data = {
         "escritura": None,
-        "rfcs": []
+        "rfcs": [],
+        "vendedores": [],
+        "adquirientes": [],
+        "inmuebles": [],
+        "montos": []
     }
 
     # Extract Escritura using deterministic regex
@@ -82,10 +90,32 @@ def extract_structured_data(text: str) -> dict:
     rfc_matches = re.findall(r"[A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3}", text)
     data["rfcs"] = list(set(rfc_matches))  # remove duplicates
 
-    # Stub for NLP
     if nlp:
-        # doc = nlp(text)
-        # NLP logic to extract Adquiriente, Enajenante, Inmueble, etc.
-        pass
+        doc = nlp(text)
+        for ent in doc.ents:
+            if ent.label_ == "VENDEDOR":
+                data["vendedores"].append(ent.text)
+            elif ent.label_ == "ADQUIRENTE":
+                data["adquirientes"].append(ent.text)
+            elif ent.label_ == "INMUEBLE":
+                data["inmuebles"].append(ent.text)
+            elif ent.label_ == "MONTO":
+                data["montos"].append(ent.text)
+
+    # Fallback logic if spacy fails to populate vendedores and adquirientes
+    if not data["vendedores"]:
+        # Look for COMPARECE
+        # Very simple fallback: grab names after COMPARECE up to a certain point or line break
+        # Assuming names are capital letters
+        comparece_matches = re.findall(r"COMPARECE[\s:A-Za-z]*(?:[A-Z][A-Z\s]+)", text)
+        if comparece_matches:
+             # Very rough fallback
+             data["vendedores"] = [m.split("COMPARECE")[-1].strip() for m in comparece_matches]
+
+    if not data["adquirientes"]:
+        # Look for COMPRA
+        compra_matches = re.findall(r"COMPRA[\s:A-Za-z]*(?:[A-Z][A-Z\s]+)", text)
+        if compra_matches:
+             data["adquirientes"] = [m.split("COMPRA")[-1].strip() for m in compra_matches]
 
     return data

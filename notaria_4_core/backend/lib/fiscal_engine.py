@@ -1,5 +1,8 @@
 import re
 import unicodedata
+import inspect
+import asyncio
+import time
 from decimal import Decimal, getcontext, ROUND_HALF_UP
 
 # Set strict decimal precision
@@ -69,15 +72,63 @@ def sanitize_name(name: str) -> str:
     # Basic uppercase conversion as SAT usually expects uppercase
     return clean_name.upper()
 
-def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = Decimal("0.03")) -> Decimal:
+_ISAI_RATE_CACHE = None
+_ISAI_RATE_LAST_FETCH = 0
+_ISAI_RATE_CACHE_TTL = 3600
+
+def get_remote_config_sync():
+    import firebase_admin
+    from firebase_admin import remote_config
+    if not firebase_admin._apps:
+        firebase_admin.initialize_app()
+
+    fetch_func = remote_config.get_server_template
+    if inspect.iscoroutinefunction(fetch_func):
+        return asyncio.run(fetch_func())
+    else:
+        return fetch_func()
+
+def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = None) -> Decimal:
     """
     Calculates ISAI for Manzanillo.
     Formula: Max(Price, Cadastral) * Rate
     """
+    global _ISAI_RATE_CACHE, _ISAI_RATE_LAST_FETCH
+
+    if rate is None:
+        current_time = time.time()
+        if _ISAI_RATE_CACHE is None or (current_time - _ISAI_RATE_LAST_FETCH) > _ISAI_RATE_CACHE_TTL:
+            try:
+                template = get_remote_config_sync()
+                rate_str = template.parameters.get("tasa_isai_manzanillo").default_value.value
+                _ISAI_RATE_CACHE = Decimal(rate_str)
+                _ISAI_RATE_LAST_FETCH = current_time
+            except Exception:
+                # Default fallback
+                _ISAI_RATE_CACHE = Decimal("0.03")
+        rate = _ISAI_RATE_CACHE
+
     base = max(operation_price, cadastral_value)
     isai = base * rate
     # Standard rounding to 2 decimals for currency
     return isai.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+def validate_conceptos_objeto_imp(conceptos: list[dict]) -> bool:
+    """
+    Validates that concepts have the correct ObjetoImp flag.
+    - 'Honorarios' must have '02'
+    - 'Suplidos' or 'Derechos' must have '01'
+    """
+    for concepto in conceptos:
+        desc = concepto.get("descripcion", "").upper()
+        objeto_imp = concepto.get("objeto_imp")
+
+        if "HONORARIO" in desc and objeto_imp != "02":
+            raise ValueError(f"Concept '{concepto.get('descripcion')}' must have ObjetoImp '02'.")
+        if ("SUPLIDO" in desc or "DERECHO" in desc) and objeto_imp != "01":
+            raise ValueError(f"Concept '{concepto.get('descripcion')}' must have ObjetoImp '01'.")
+
+    return True
 
 def calculate_retentions(rfc_receptor: str, subtotal: Decimal, iva_rate: Decimal = Decimal("0.16")) -> dict:
     """
