@@ -1,6 +1,8 @@
 from decimal import Decimal
 import pytest
-from notaria_4_core.backend.lib.fiscal_engine import sanitize_name, validate_copropiedad, calculate_retentions, calculate_isai_manzanillo, validate_postal_code
+from unittest.mock import patch
+from notaria_4_core.backend.lib.fiscal_engine import sanitize_name, validate_copropiedad, calculate_retentions, calculate_isai_manzanillo, validate_postal_code, validate_conceptos_objeto_imp
+import notaria_4_core.backend.lib.fiscal_engine as fiscal_engine
 
 def test_sanitize_name():
     # Test removal of S.A. DE C.V.
@@ -42,14 +44,53 @@ def test_calculate_retentions_fisica():
     assert ret["is_moral"] is False
     assert ret["isr"] == Decimal("0.00")
 
-def test_isai_manzanillo():
+@patch("notaria_4_core.backend.lib.fiscal_engine.get_remote_config_sync")
+def test_isai_manzanillo(mock_get_remote_config_sync):
+    fiscal_engine._ISAI_RATE_CACHE = None
+
+    class MockValue:
+        def __init__(self, val):
+            self.value = val
+
+    class MockDefaultValue:
+        def __init__(self, val):
+            self.default_value = MockValue(val)
+
+    class MockTemplate:
+        def __init__(self):
+            self.parameters = {"tasa_isai_manzanillo": MockDefaultValue("0.05")}
+
+    mock_get_remote_config_sync.return_value = MockTemplate()
+
     price = Decimal("1000000.00")
     cadastral = Decimal("500000.00")
-    # Max is 1M. Rate 0.03 -> 30,000
-    assert calculate_isai_manzanillo(price, cadastral) == Decimal("30000.00")
+    # Max is 1M. Rate 0.05 -> 50,000
+    assert calculate_isai_manzanillo(price, cadastral) == Decimal("50000.00")
 
     # Cadastral higher
-    assert calculate_isai_manzanillo(price, Decimal("2000000.00")) == Decimal("60000.00")
+    assert calculate_isai_manzanillo(price, Decimal("2000000.00")) == Decimal("100000.00")
+
+    # Test default fallback when mocked call fails
+    fiscal_engine._ISAI_RATE_CACHE = None
+    mock_get_remote_config_sync.side_effect = Exception("Failed")
+    assert calculate_isai_manzanillo(price, cadastral) == Decimal("30000.00")
+
+def test_validate_conceptos_objeto_imp():
+    # Valid cases
+    valid_conceptos = [
+        {"descripcion": "HONORARIOS NOTARIALES", "objeto_imp": "02"},
+        {"descripcion": "GASTOS SUPLIDOS", "objeto_imp": "01"},
+        {"descripcion": "DERECHOS DE REGISTRO", "objeto_imp": "01"},
+        {"descripcion": "OTRO CONCEPTO", "objeto_imp": "02"}
+    ]
+    assert validate_conceptos_objeto_imp(valid_conceptos) is True
+
+    # Invalid cases
+    with pytest.raises(ValueError):
+        validate_conceptos_objeto_imp([{"descripcion": "HONORARIOS", "objeto_imp": "01"}])
+
+    with pytest.raises(ValueError):
+        validate_conceptos_objeto_imp([{"descripcion": "SUPLIDOS", "objeto_imp": "02"}])
 
 def test_validate_postal_code():
     # Known CP
