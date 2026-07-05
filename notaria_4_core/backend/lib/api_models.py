@@ -44,6 +44,7 @@ class DescInmueble(BaseModel):
     tipo_inmueble: str
     calle: str
     estado: str
+    municipio: str
     pais: str = "MEX"
     codigo_postal: str
 
@@ -69,6 +70,13 @@ class InvoiceRequest(BaseModel):
     copropietarios: Optional[List[Copropietario]] = None
     datos_extra: Optional[dict] = None
     complemento_notarios: Optional[ComplementoNotariosModel] = None
+
+class InvoiceResponse(BaseModel):
+    status: str
+    xml_base64: str
+    pdf_base64: str
+    retentions_calculated: dict
+    nom151_constancia: dict
 
 class ISAIRequest(BaseModel):
     operation_price: Decimal

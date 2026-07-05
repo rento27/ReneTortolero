@@ -3,11 +3,13 @@ from decimal import Decimal
 import uuid
 import os
 import shutil
+import base64
 
-from lib.api_models import InvoiceRequest, ISAIRequest
-from lib.fiscal_engine import sanitize_name, calculate_isai_manzanillo, calculate_retentions, validate_postal_code
+from lib.api_models import InvoiceRequest, ISAIRequest, InvoiceResponse
+from lib.fiscal_engine import sanitize_name, calculate_isai_manzanillo, calculate_retentions, validate_postal_code, validate_conceptos_objeto_imp
 from lib.xml_generator import generate_signed_xml
 from lib.ocr_engine import extract_text_from_pdf, extract_structured_data
+from lib.pdf_generator import generate_hybrid_pdf, generate_nom151_stamp
 
 app = FastAPI(title="Notaria 4 Digital Core API", version="1.0.0")
 
@@ -15,10 +17,16 @@ app = FastAPI(title="Notaria 4 Digital Core API", version="1.0.0")
 def health_check():
     return {"status": "ok", "service": "notaria-4-core-backend"}
 
-@app.post("/api/v1/cfdi")
+@app.post("/api/v1/cfdi", response_model=InvoiceResponse)
 def create_cfdi(request: InvoiceRequest):
     # Pydantic v2 compatibility
     data = request.model_dump()
+
+    # Validate Billing Concepts
+    try:
+        validate_conceptos_objeto_imp(data.get('conceptos', []))
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=f"Concept Validation Error: {str(ve)}")
 
     # 1. Sanitize Receptor Name
     data['receptor']['nombre'] = sanitize_name(data['receptor']['nombre'])
@@ -37,13 +45,22 @@ def create_cfdi(request: InvoiceRequest):
     # 3. Generate XML
     try:
         xml_bytes = generate_signed_xml(data)
+
+        # 4. Generate Hybrid PDF
+        pdf_bytes = generate_hybrid_pdf(data, xml_bytes)
+
+        # 5. Generate NOM-151 Stamp
+        nom151_stamp = generate_nom151_stamp(pdf_bytes)
+
         # In a real scenario, we might upload this to storage and return a URL
-        # For now, return the stub content
-        return {
-            "status": "success",
-            "xml_base64": xml_bytes.decode('utf-8'), # Stub returns simple string bytes
-            "retentions_calculated": retentions
-        }
+        # For now, return the base64 encoded content
+        return InvoiceResponse(
+            status="success",
+            xml_base64=base64.b64encode(xml_bytes).decode('utf-8') if isinstance(xml_bytes, bytes) else "",
+            pdf_base64=base64.b64encode(pdf_bytes).decode('utf-8') if isinstance(pdf_bytes, bytes) else "",
+            retentions_calculated=retentions,
+            nom151_constancia=nom151_stamp
+        )
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=f"Validation Error: {str(ve)}")
     except Exception as e:
