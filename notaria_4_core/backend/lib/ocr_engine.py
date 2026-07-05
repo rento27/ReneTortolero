@@ -21,9 +21,15 @@ except ImportError:
 try:
     import spacy
     try:
-        nlp = spacy.load("es_core_news_sm")
+        # The prompt mentions using a custom-trained model named 'ner_notaria',
+        # falling back to 'es_core_news_lg'
+        try:
+            nlp = spacy.load("ner_notaria")
+        except Exception:
+            logger.info("Custom model 'ner_notaria' not found, falling back to 'es_core_news_lg'")
+            nlp = spacy.load("es_core_news_lg")
     except Exception as e:
-        logger.warning(f"spaCy model 'es_core_news_sm' not found. NLP features disabled. {e}")
+        logger.warning(f"spaCy model not found. NLP features disabled. {e}")
         nlp = None
 except ImportError:
     spacy = None
@@ -66,10 +72,16 @@ def extract_structured_data(text: str) -> dict:
     """
     Extracts structured data (like RFC and Escritura numbers) from raw text
     using regular expressions and optionally NLP.
+    Explicitly returns lists for 'vendedores', 'adquirientes', 'inmuebles', and 'montos',
+    alongside 'escritura' and 'rfcs'.
     """
     data = {
         "escritura": None,
-        "rfcs": []
+        "rfcs": [],
+        "vendedores": [],
+        "adquirientes": [],
+        "inmuebles": [],
+        "montos": []
     }
 
     # Extract Escritura using deterministic regex
@@ -82,10 +94,32 @@ def extract_structured_data(text: str) -> dict:
     rfc_matches = re.findall(r"[A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3}", text)
     data["rfcs"] = list(set(rfc_matches))  # remove duplicates
 
-    # Stub for NLP
+    # NLP extraction
     if nlp:
-        # doc = nlp(text)
-        # NLP logic to extract Adquiriente, Enajenante, Inmueble, etc.
-        pass
+        try:
+            doc = nlp(text)
+            for ent in doc.ents:
+                if ent.label_ == "VENDEDOR":
+                    data["vendedores"].append(ent.text)
+                elif ent.label_ == "ADQUIRENTE":
+                    data["adquirientes"].append(ent.text)
+                elif ent.label_ == "INMUEBLE":
+                    data["inmuebles"].append(ent.text)
+                elif ent.label_ == "MONTO":
+                    data["montos"].append(ent.text)
+        except Exception as e:
+            logger.warning(f"NLP extraction failed: {e}")
+
+    # Fallback to explicit string matching if NLP failed to find anything
+    if not data["vendedores"]:
+        vendedor_match = re.search(r"COMPARECE[^\n]+?([A-Z\s]+)", text)
+        if vendedor_match:
+            # Basic fallback logic to grab some text
+            data["vendedores"].append(vendedor_match.group(1).strip())
+
+    if not data["adquirientes"]:
+        adquiriente_match = re.search(r"COMPRA[^\n]+?([A-Z\s]+)", text)
+        if adquiriente_match:
+            data["adquirientes"].append(adquiriente_match.group(1).strip())
 
     return data
