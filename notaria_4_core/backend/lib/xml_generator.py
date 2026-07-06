@@ -7,7 +7,7 @@ try:
 except ImportError:
     cfdi40 = None
 
-from .fiscal_engine import validate_copropiedad, calculate_retentions
+from .fiscal_engine import validate_copropiedad, calculate_retentions, validate_conceptos_objeto_imp
 from .api_models import ComplementoNotariosModel
 from .security import load_signer_from_secret_manager
 
@@ -24,6 +24,8 @@ def generate_signed_xml(invoice_data: dict) -> bytes:
     if 'copropietarios' in invoice_data and invoice_data['copropietarios']:
         percentages = [Decimal(str(p['porcentaje'])) for p in invoice_data['copropietarios']]
         validate_copropiedad(percentages)
+
+    validate_conceptos_objeto_imp(invoice_data.get('conceptos', []))
 
     if not cfdi40:
         logger.error("satcfdi library not found")
@@ -120,21 +122,16 @@ def generate_signed_xml(invoice_data: dict) -> bytes:
             # Re-instantiate Pydantic model to ensure validation
             comp_model = ComplementoNotariosModel(**invoice_data['complemento_notarios'])
             complemento = create_complemento_notarios(comp_model)
-            cfdi.add_complemento(complemento)
+            cfdi_kwargs['Complemento'] = complemento
+            cfdi = cfdi40.Comprobante(**cfdi_kwargs)
 
         # 5. Signing
         signer = load_signer_from_secret_manager()
         if signer is None:
-            # Check if we should allow unsigned for tests
-            import os
-            if os.environ.get("MOCK_SIGNER") != "1":
-                raise ValueError("Signer could not be loaded from Secret Manager.")
+            raise ValueError("Signer could not be loaded from Secret Manager.")
 
-            # Unsigned stub string return
-            return cfdi.xml_bytes()
-        else:
-            cfdi.sign(signer)
-            return cfdi.xml_bytes()
+        cfdi.sign(signer)
+        return cfdi.xml_bytes()
 
     except Exception as e:
         logger.error(f"Error generating CFDI: {e}")
