@@ -21,10 +21,14 @@ except ImportError:
 try:
     import spacy
     try:
-        nlp = spacy.load("es_core_news_sm")
+        nlp = spacy.load("ner_notaria")
     except Exception as e:
-        logger.warning(f"spaCy model 'es_core_news_sm' not found. NLP features disabled. {e}")
-        nlp = None
+        logger.warning(f"Custom spaCy model 'ner_notaria' not found. Attempting fallback to 'es_core_news_lg'. {e}")
+        try:
+            nlp = spacy.load("es_core_news_lg")
+        except Exception as e2:
+            logger.warning(f"Fallback spaCy model 'es_core_news_lg' not found. NLP features disabled. {e2}")
+            nlp = None
 except ImportError:
     spacy = None
     nlp = None
@@ -69,7 +73,11 @@ def extract_structured_data(text: str) -> dict:
     """
     data = {
         "escritura": None,
-        "rfcs": []
+        "rfcs": [],
+        "vendedores": [],
+        "adquirientes": [],
+        "inmuebles": [],
+        "montos": []
     }
 
     # Extract Escritura using deterministic regex
@@ -82,10 +90,32 @@ def extract_structured_data(text: str) -> dict:
     rfc_matches = re.findall(r"[A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3}", text)
     data["rfcs"] = list(set(rfc_matches))  # remove duplicates
 
-    # Stub for NLP
+    nlp_populated = False
     if nlp:
-        # doc = nlp(text)
-        # NLP logic to extract Adquiriente, Enajenante, Inmueble, etc.
-        pass
+        doc = nlp(text)
+        # Assuming the custom model returns specific labels for 'VENDEDOR', 'ADQUIRIENTE', 'INMUEBLE', 'MONTO'
+        for ent in doc.ents:
+            if ent.label_ == "VENDEDOR":
+                data["vendedores"].append(ent.text)
+                nlp_populated = True
+            elif ent.label_ == "ADQUIRIENTE":
+                data["adquirientes"].append(ent.text)
+                nlp_populated = True
+            elif ent.label_ == "INMUEBLE":
+                data["inmuebles"].append(ent.text)
+                nlp_populated = True
+            elif ent.label_ == "MONTO":
+                data["montos"].append(ent.text)
+                nlp_populated = True
+
+    # Fallback to explicit string matching logic looking for keywords COMPARECE and COMPRA
+    if not data["vendedores"] and not data["adquirientes"]:
+        lines = text.splitlines()
+        for i, line in enumerate(lines):
+            if "COMPARECE" in line.upper():
+                # Extract the rest of the line or next lines, simplistic fallback
+                data["vendedores"].append(line.replace("COMPARECE", "").strip())
+            if "COMPRA" in line.upper():
+                data["adquirientes"].append(line.replace("COMPRA", "").strip())
 
     return data

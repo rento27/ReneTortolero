@@ -1,6 +1,18 @@
 import re
 import unicodedata
 from decimal import Decimal, getcontext, ROUND_HALF_UP
+import time
+import inspect
+import asyncio
+
+try:
+    import firebase_admin
+    from firebase_admin import remote_config
+    from firebase_admin import firestore
+except ImportError:
+    firebase_admin = None
+    remote_config = None
+    firestore = None
 
 # Set strict decimal precision
 getcontext().prec = 50
@@ -20,27 +32,84 @@ ISR_RETENTION_RATE = Decimal("0.10")
 # The prompt says "Matemáticamente, esto equivale a una tasa del 10.6667%".
 IVA_RETENTION_RATE_DIRECT = Decimal("0.106667")
 
-# Stub for Postal Code Catalog (Manzanillo samples)
-# In production, this would be loaded from Firestore/Cache
-VALID_POSTAL_CODES = {
-    "28200": "COL",
-    "28218": "COL",
-    "28230": "COL",
-    "06600": "CMX" # Mexico City sample
-}
+_ISAI_RATE_CACHE = None
+_ISAI_RATE_LAST_FETCH = 0
+_ISAI_RATE_CACHE_TTL = 3600
+
+def get_remote_config_sync():
+    """
+    Safely executes the async firebase_admin.remote_config.get_server_template()
+    function in a synchronous context.
+    """
+    if not remote_config:
+        return None
+
+    try:
+        if inspect.iscoroutinefunction(remote_config.get_server_template):
+            # Run in a new event loop
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # If an event loop is already running, we can't use run_until_complete easily here
+                    # We might be inside FastAPI. It's safer to use a thread pool or run_coroutine_threadsafe,
+                    # but for simplicity let's try asyncio.run() in a new loop if possible, or wait.
+                    import threading
+                    result = []
+                    def run():
+                        result.append(asyncio.run(remote_config.get_server_template()))
+                    t = threading.Thread(target=run)
+                    t.start()
+                    t.join()
+                    return result[0] if result else None
+                else:
+                    return loop.run_until_complete(remote_config.get_server_template())
+            except RuntimeError:
+                return asyncio.run(remote_config.get_server_template())
+        else:
+            return remote_config.get_server_template()
+    except Exception as e:
+        # Log error or handle it
+        return None
 
 def validate_postal_code(cp: str, expected_state: str = None) -> bool:
     """
-    Validates the postal code against the authorized catalog.
+    Validates the postal code against the authorized catalog in Firestore.
     If expected_state (e.g., 'COL') is provided, ensures the CP belongs to that state.
     """
-    if cp not in VALID_POSTAL_CODES:
-        # In this stub, we reject unknown CPs.
-        # In production, this would reject CPs not found in the full SAT catalog.
+    if not firestore:
+        # Fallback if firestore is not available for some reason
         return False
 
-    if expected_state and VALID_POSTAL_CODES[cp] != expected_state:
+    try:
+        db = firestore.client()
+        # Querying the catalogos_sat collection
+        docs = db.collection('catalogos_sat').where('c_CodigoPostal', '==', cp).limit(1).get()
+        if not docs:
+            return False
+
+        doc = docs[0].to_dict()
+
+        if expected_state and doc.get('estado') != expected_state:
+            return False
+
+        return True
+    except Exception as e:
+        # Handle exceptions appropriately, maybe fallback to a default behavior or log
         return False
+
+def validate_conceptos_objeto_imp(conceptos: list[dict]) -> bool:
+    """
+    Validates that concepts have the correct ObjetoImp based on their description.
+    'Honorarios' should have '02'. 'Suplidos' or 'Derechos' should have '01'.
+    """
+    for concepto in conceptos:
+        desc = concepto.get('descripcion', '').upper()
+        obj_imp = concepto.get('objeto_imp')
+
+        if 'HONORARIO' in desc and obj_imp != '02':
+            raise ValueError(f"Concept '{desc}' must have ObjetoImp '02'.")
+        if ('SUPLIDO' in desc or 'DERECHO' in desc) and obj_imp != '01':
+            raise ValueError(f"Concept '{desc}' must have ObjetoImp '01'.")
 
     return True
 
@@ -69,11 +138,28 @@ def sanitize_name(name: str) -> str:
     # Basic uppercase conversion as SAT usually expects uppercase
     return clean_name.upper()
 
-def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = Decimal("0.03")) -> Decimal:
+def calculate_isai_manzanillo(operation_price: Decimal, cadastral_value: Decimal, rate: Decimal = None) -> Decimal:
     """
     Calculates ISAI for Manzanillo.
-    Formula: Max(Price, Cadastral) * Rate
+    Formula: Max(Price, Cadastral) * Rate.
+    If rate is not provided, it fetches it from Firebase Remote Config.
     """
+    global _ISAI_RATE_CACHE, _ISAI_RATE_LAST_FETCH
+
+    if rate is None:
+        current_time = time.time()
+        if _ISAI_RATE_CACHE is None or (current_time - _ISAI_RATE_LAST_FETCH > _ISAI_RATE_CACHE_TTL):
+            template = get_remote_config_sync()
+            if template and 'tasa_isai_manzanillo' in template.parameters:
+                # Get the default value of the parameter
+                val = template.parameters['tasa_isai_manzanillo'].default_value.value
+                _ISAI_RATE_CACHE = Decimal(str(val))
+            else:
+                _ISAI_RATE_CACHE = Decimal("0.03") # Default
+            _ISAI_RATE_LAST_FETCH = current_time
+
+        rate = _ISAI_RATE_CACHE
+
     base = max(operation_price, cadastral_value)
     isai = base * rate
     # Standard rounding to 2 decimals for currency
