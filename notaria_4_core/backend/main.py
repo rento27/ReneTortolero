@@ -4,10 +4,13 @@ import uuid
 import os
 import shutil
 
-from lib.api_models import InvoiceRequest, ISAIRequest
+import base64
+from lib.api_models import InvoiceRequest, ISAIRequest, InvoiceResponse
 from lib.fiscal_engine import sanitize_name, calculate_isai_manzanillo, calculate_retentions, validate_postal_code
 from lib.xml_generator import generate_signed_xml
 from lib.ocr_engine import extract_text_from_pdf, extract_structured_data
+from lib.pdf_generator import generate_hybrid_pdf
+from lib.nom151 import stamp_pdf_hash
 
 app = FastAPI(title="Notaria 4 Digital Core API", version="1.0.0")
 
@@ -37,13 +40,24 @@ def create_cfdi(request: InvoiceRequest):
     # 3. Generate XML
     try:
         xml_bytes = generate_signed_xml(data)
-        # In a real scenario, we might upload this to storage and return a URL
-        # For now, return the stub content
-        return {
-            "status": "success",
-            "xml_base64": xml_bytes.decode('utf-8'), # Stub returns simple string bytes
-            "retentions_calculated": retentions
-        }
+
+        # 4. Generate Hybrid PDF
+        pdf_bytes = generate_hybrid_pdf(data, xml_bytes)
+
+        # 5. Stamp PDF (NOM-151)
+        nom151_constancia = stamp_pdf_hash(pdf_bytes)
+
+        # Encode bytes to base64 for response
+        xml_b64 = base64.b64encode(xml_bytes).decode('utf-8')
+        pdf_b64 = base64.b64encode(pdf_bytes).decode('utf-8') if pdf_bytes else ""
+
+        return InvoiceResponse(
+            status="success",
+            xml_base64=xml_b64,
+            pdf_base64=pdf_b64,
+            retentions_calculated=retentions,
+            nom151_constancia=nom151_constancia
+        )
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=f"Validation Error: {str(ve)}")
     except Exception as e:
